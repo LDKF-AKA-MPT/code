@@ -55,7 +55,7 @@ void setRate(){
 
 void disableUnused(){
     // Disable other messages (GGA, GSA, etc)
-    char* queryCommand[] = {"$PSRF103,00,00,00,01*24\r\n","$PSRF103,02,00,00,01*24\r\n","$PSRF103,03,00,00,01*24\r\n","$PSRF103,04,00,00,01*24\r\n","$PSRF103,05,00,00,01*24\r\n","$PSRF103,06,00,00,01*24\r\n","$PSRF103,08,00,00,01*24\r\n"};
+    char* queryCommand[] = {"$PSRF103,00,00,00,01*24\r\n","$PSRF103,02,00,00,01*26\r\n","$PSRF103,03,00,00,01*27\r\n","$PSRF103,04,00,00,01*20\r\n","$PSRF103,05,00,00,01*21\r\n","$PSRF103,06,00,00,01*22\r\n","$PSRF103,08,00,00,01*2C\r\n"};
     int qLen = strlen(queryCommand[0]);
     int i;
     int j;
