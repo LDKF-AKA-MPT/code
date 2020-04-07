@@ -12,18 +12,17 @@ void init_msp430(){
     WDTCTL = WDTPW | WDTHOLD;   // stop watchdog timer
     P3SEL |= BIT3 + BIT4; // Select P3.3 for USCI_A0 TXD and P3.4 for USCI_A0 RXD
     UCA0CTL1 |= UCSWRST; // Reset state machine
+    UCSCTL4 &= !SELS_4; // Use XT1 oscillator as SMCLK source
     UCA0CTL1 |= UCSSEL_2; // SMCLK
-    UCA0BR0 = 0x6D; // Baud Rate to 9600
+    UCA0BR0 = 0x06; // Baud Rate to 4800
     UCA0BR1 = 0x00;
-    UCA0MCTL = UCBRS_2 + UCBRF_0; // UCBRSx is 1 and UCBRFx is 0 for modulation pattern 01000000
+    UCA0MCTL = UCBRS_7 + UCBRF_0; // UCBRSx is 7 and UCBRFx is 0
     UCA0CTL1 &= ~UCSWRST; // Init state machine
     UCA0IE |= UCRXIE; // Enable USCI_A0 RX interrupts
-
-
 }
 
 void initGPS(){
-    char* initCommand = "$PSRF100,1,9600,8,1,0*0D\r\n"; // Set Serial PORT ID: 100 Set PORTA parameters and protocol
+    char* initCommand = "$PSRF100,1,4800,8,1,0*0E\r\n"; // Set Serial PORT ID: 100 Set PORTA parameters and protocol
     int i;
     int cLen = strlen(initCommand);
     for(i = 0; i < cLen; i++){
