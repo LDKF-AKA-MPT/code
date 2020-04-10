@@ -1,4 +1,5 @@
 #include <math.h>
+#define Pi 3.14159265359
 
 float to_radians(float degrees) {
     // Convert degrees to radians
