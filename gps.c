@@ -1,12 +1,17 @@
 #include <msp430.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#define Pi 3.14159265359
 
-char buff[1000] = {0};
+char buff[50] = {0};
 int counter = 0;     // buffer counter
 int receiveflag = 0; // start to receive message flag
 int storeflag = 0;   // start to store into buffer flag
-
+char* coords[4];
+float latitude;
+float longitude;
 
 void init_msp430(){
     WDTCTL = WDTPW | WDTHOLD;   // stop watchdog timer
@@ -32,15 +37,6 @@ void initGPS(){
     }
 }
 
-//void enableDebug() {
-//    char* debugCommand = "$PSRF105,1*3E\r\n"; // Query command to enable debugging
-//    int qLen = strlen(debugCommand);
-//    int i;
-//    for(i = 0; i < qLen; i++){
-//        while (!(UCA0IFG&UCTXIFG)); // Wait for USCI_A0 TX buffer ready
-//        UCA0TXBUF = debugCommand[i]; // set TX buffer with current command char
-//    }
-//}
 
 void setRate(){
     char* rateCommand = "$PSRF103,01,00,01,01*24\r\n"; // Query command to set rate
@@ -64,7 +60,7 @@ void disableUnused(){
             UCA0TXBUF = queryCommand[i][j]; // set TX buffer with current command char
             __delay_cycles(10);
         }
-        __delay_cycles(100);
+        __delay_cycles(1000);
     }
 
 }
@@ -80,18 +76,78 @@ void sendQuery(){
     }
 }
 
+float convertCoord(char* coordD, char* coordM) {
+    int degree =  strtol(coordD, NULL, 10);
+    float minute = strtof(coordM, NULL)/60.0;
+    return degree+minute;
+}
+
+void getCoords() {
+    receiveflag = 0;    // end receiving
+
+    char latD[3];   // strings for lat degrees and minute
+    char latM[8];
+    char lonD[4];    // strings for lon degrees and minute
+    char lonM[8];
+
+    unsigned int lati = 1;   // counters
+    unsigned int loni = 1;
+    unsigned int i;
+
+    latD[1] = buff[6];      // store latD
+    latD[2] = buff[7];
+
+    for (i = 8; i < 15; i++) {   // store latM
+        latM[lati] = buff[i];
+        lati++;
+    }
+    if (buff[16] == 'S') {  //determine sign
+        latD[0] = '-';
+        latM[0] = '-';
+    }
+    else {
+        latD[0] = '+';
+        latM[0] = '+';
+    }
+    coords[0] = latD;
+    coords[1] = latM;
+
+    lonD[1] = buff[18];     // store lonD
+    lonD[2] = buff[19];
+    lonD[3] = buff[20];
+
+    for (i = 21; i < 28; i++) {   // store lonM
+        lonM[loni] = buff[i];
+        loni++;
+    }
+    if (buff[29] == 'W') {  // determine sign
+        lonD[0] = '-';
+        lonM[0] = '-';
+    }
+    else {
+        lonD[0] = '+';
+        lonM[0] = '=';
+    }
+    coords[2] = lonD;
+    coords[3] = lonM;
+
+    latitude = convertCoord(coords[0], coords[1]);
+    longitude = convertCoord(coords[2], coords[3]);
+}
+
 int main(void)
 {
     init_msp430();
-//    enableDebug();
-//    __delay_cycles(100);
+
     initGPS();
     __delay_cycles(100);
     setRate();
     __delay_cycles(100);
     disableUnused();
     sendQuery();
+    while (!(P2IN & 0x01)); // wait for gps to fix coords
     receiveflag = 1;
+
 
     __bis_SR_register(LPM0_bits + GIE); // Enter low power mode, interrupts enabled
     __no_operation(); // For debugger
@@ -117,8 +173,8 @@ void __attribute__ ((interrupt(USCI_A0_VECTOR))) USCI_A0_ISR (void)
             temp = UCA0RXBUF;
             if (temp == '*') {               // stop storing if useful info ends
                 storeflag = 0;
-                buff[counter] = '\n';        // store a newline
-                counter++;
+                counter = 0;
+                getCoords();
             }
             if (storeflag){
                 buff[counter] = temp;
