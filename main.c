@@ -4,12 +4,15 @@
 #include <stdio.h>
 // http://www.ti.com/lit/zip/slaa208
 #include "I2Croutines.h"
+#define Pi 3.14159265359
 
 unsigned char read_val;
 unsigned char write_val;
+// Buttons on 1.4, 1.5, 3.7, 4.0
 int button1Flag = 0;
 int button2Flag = 0;
 int button3Flag = 0;
+int button4Flag = 0;
 char buff[1000] = {0};
 int counter = 0;     // buffer counter
 int receiveflag = 0; // start to receive message flag
@@ -19,12 +22,11 @@ void init_msp430(){
     WDTCTL = WDTPW + WDTHOLD;
     __bis_SR_register( GIE ); // Let interupts be global
 
-    //UCSCTL2 |= FLLD1 + FLLD0; // Set clock divided by 8
     // Set Clocks
     UCSCTL5 |= DIVS0 + DIVS2; // SMCLK = fSMCLK/32
     UCSCTL5 |= DIVM0 + DIVM2; // MLCK = fMCLK/32
 
-	// LCD init
+    // LCD init
     P4SEL |= BIT1 + BIT2 + BIT3; // SPI pins 4.1 (UCB1SIMO), 4.2 (UCB1SOMI) 4.3 (UCB1CLK)
     P1DIR |= BIT3; // P1.3 for Slave Select
     UCB1CTL1 |= UCSWRST; // Reset state machine
@@ -34,9 +36,9 @@ void init_msp430(){
     UCB1BR0 = 0x02; // Set baud rate for UCB1
     UCB1BR1 = 0;
     UCB1CTL1 &= ~UCSWRST; // Init state machine
-	
-	// GPS init
-	P3SEL |= BIT3 + BIT4; // Select P3.3 for USCI_A0 TXD and P3.4 for USCI_A0 RXD
+
+    // GPS init
+    P3SEL |= BIT3 + BIT4; // Select P3.3 for USCI_A0 TXD and P3.4 for USCI_A0 RXD
     UCA0CTL1 |= UCSWRST; // Reset state machine
     UCSCTL4 &= !SELS_4; // Use XT1 oscillator as SMCLK source
     UCA0CTL1 |= UCSSEL_2; // SMCLK
@@ -45,23 +47,30 @@ void init_msp430(){
     UCA0MCTL = UCBRS_7 + UCBRF_0; // UCBRSx is 7 and UCBRFx is 0
     UCA0CTL1 &= ~UCSWRST; // Init state machine
     UCA0IE |= UCRXIE; // Enable USCI_A0 RX interrupts
-	
-	// Button 1 init
-    P1REN |= BIT1; // Enable P1.1 internal resistor
-    P1OUT |= BIT1; // Set P1.1 as pull-Up resistor
-    P1IES &= ~BIT1; // P1.1 Lo/Hi edge
-    P1IFG &= ~BIT1; // P1.1 IFG cleared
-    P1IE |= BIT1; // P1.1 interrupt enabled
 
-	// Button 2 init
-    P2REN |= BIT1; // Enable P2.1 internal resistor
-    P2OUT |= BIT1; // Set P2.1 as pull-Up resistor
-    P2IES &= ~BIT1; // P2.1 Lo/Hi edge
-    P2IFG &= ~BIT1; // P2.1 IFG cleared
-    P2IE |= BIT1; // P2.1 interrupt enabled
-	
-	// Speaker init
-	TA0CCR0 = 512-1;                          // PWM Period
+    // Button 3 and 4 init
+    P1REN |= BIT5 | BIT4; // Enable P1.1 internal resistor
+    P1OUT |= BIT5 | BIT4; // Set P1.1 as pull-Up resistor
+    P1IES &= ~BIT5 & ~BIT4; // P1.1 Lo/Hi edge
+    P1IFG &= ~BIT5 & ~BIT4; // P1.1 IFG cleared
+    P1IE |= BIT5 | BIT4; // P1.1 interrupt enabled
+
+    // Button 1 init
+    P3REN |= BIT7; // Enable P2.1 internal resistor
+    P3OUT |= BIT7; // Set P2.1 as pull-Up resistor
+    P3IES &= ~BIT7; // P2.1 Lo/Hi edge
+    P3IFG &= ~BIT7; // P2.1 IFG cleared
+    P3IE |= BIT7; // P2.1 interrupt enabled
+
+    // Button 2 init
+    P4REN |= BIT0; // Enable P2.1 internal resistor
+    P4OUT |= BIT0; // Set P2.1 as pull-Up resistor
+    P4IES &= ~BIT0; // P2.1 Lo/Hi edge
+    P4IFG &= ~BIT0; // P2.1 IFG cleared
+    P4IE |= BIT0; // P2.1 interrupt enabled
+
+    // Speaker init
+    TA0CCR0 = 512-1;                          // PWM Period
     TA0CCTL1 = OUTMOD_7;                      // CCR1 reset/set
     TA0CCR1 = 256;                            // CCR1 PWM duty cycle
     TA0CTL = TASSEL_2 + MC_1 + TACLR;         // SMCLK, up mode, clear TAR
@@ -75,15 +84,11 @@ void init_msp430(){
 
 double to_radians(double degrees) {
     // Convert degrees to radians
-    return degrees/180.0*3.14159265359;
+    return degrees/180.0*Pi;
 }
 
 double calculateDistance(double lat1, double lat2, double deltaLat, double deltaLon){
     // Calculate distance between current location and destination using Haversine formula
-//    double lat1 = to_radians(currLat);            // move these 4 lines to caller function
-//    double lat2 = to_radians(destLat);
-//    double deltaLat = to_radians(destLat-currLat);
-//    double deltaLon = to_radians(destLon-currLon);
     double a = pow(sin(deltaLat/2), 2.0) + cos(lat1)*cos(lat2)*pow(sin(deltaLon/2), 2.0);
     return 2*atan2(sqrt(a), sqrt(1-a))*6371000.0;
 }
@@ -196,42 +201,71 @@ void new_line(){
 }
 
 void main (void){
+    InitI2C(0x50); // Initialize I2C module
+    init_msp430();
+    init_lcd();
+    clear_lcd();
+    initGPS();
+    __delay_cycles(100);
+    setRate();
+    __delay_cycles(100);
+    disableUnused();
+    sendQuery();
     while(1){
-		// Save Button - Saves current coodinates
+        // Save Button - Saves current coodinates
         if (button1Flag){
-            
-			button1Flag = 0;
+            // Get current coords
+            button1Flag = 0;
         }
-		// Track Button - Loads saved location and tracks back to it from current location
+        // Track Button - Loads saved location and tracks back to it from current location
         if (button2Flag){
-			
-			button2Flag = 0;
+
+            button2Flag = 0;
         }
-		// Battery Reset Button - Resets battery state
-		if (button3Flag) {
-			
-			button3Flag = 0;
-		}
+        // Battery Reset Button - Resets battery state
+        if (button3Flag) {
+
+            button3Flag = 0;
+        }
+        // Other button
+        if (button4Flag) {
+
+            button4Flag = 0;
+        }
     }
 }
 
-// P1.1 interrupt
-#pragma vector=PORT1_VECTOR
-__interrupt void Port_1(void){
-    switch( __even_in_range( P1IV, P1IV_P1IFG7 )) {
-    case P1IV_P1IFG1:
+// P3.7 interrupt PB1
+#pragma vector=PORT3_VECTOR
+__interrupt void Port_3(void){
+    switch( __even_in_range( P3IV, P3IV_P3IFG7 )) {
+    case P3IV_P3IFG7:
         button1Flag = 1;
         break;
     default:   _never_executed();
     }
 }
 
-// P2.1 interrupt
+// P4.0 interrupt PB2
 #pragma vector=PORT2_VECTOR
 __interrupt void Port_2(void){
-    switch( __even_in_range( P2IV, P2IV_P2IFG7 )) {
-    case P2IV_P2IFG1:
+    switch( __even_in_range( P4IV, P4IV_P2IFG7 )) {
+    case P4IV_P4IFG0:
         button2Flag = 1;
+        break;
+    default:   _never_executed();
+    }
+}
+
+// P1.5 and P1.4 interrupt PB3 PB4
+#pragma vector=PORT1_VECTOR
+__interrupt void Port_1(void){
+    switch( __even_in_range( P1IV, P1IV_P3IFG7 )) {
+    case P1IV_P1IFG5:
+        button3Flag = 1;
+        break;
+    case P1IV_P1IFG4:
+        button4Flag = 1;
         break;
     default:   _never_executed();
     }
@@ -240,9 +274,7 @@ __interrupt void Port_2(void){
 // Timer0 A0 interrupt service routine
 #pragma vector=TIMER1_A0_VECTOR
 __interrupt void TIMER1_A0_ISR(void)
-void __attribute__ ((interrupt(TIMER1_A0_VECTOR))) TIMER1_A0_ISR (void)
-
-{
+void __attribute__ ((interrupt(TIMER1_A0_VECTOR))) TIMER1_A0_ISR (void){
     if (counter >= 9) {
         if (P1DIR & BIT2) {
             P1DIR &= 0xfb;      //turn off output
