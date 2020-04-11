@@ -228,18 +228,43 @@ void main (void){
     }
 }
 
-// P4.0 interrupt PB2
+
+// P2.0 interrupt PB1
+//#pragma vector=PORT2_VECTOR
+__interrupt void Port_2(void){
+    if (P2IFG & BIT0){
+        button1Flag = 1;
+        break;
+    }
+}
+
+// P1.6 P1.5 and P1.4 interrupt PB2 PB3 PB4
+//#pragma vector=PORT1_VECTOR
+__interrupt void Port_1(void){
+    if (P1IFG & BIT5){
+        button3Flag = 1;
+        break;
+    } else if (P1IFG & BIT4){
+        button4Flag = 1;
+        break;
+    } else if (P1IFG & BIT6){
+        button2Flag = 1;
+        break;
+    }
+}
+/*
+// P2.0 interrupt PB1
 #pragma vector=PORT2_VECTOR
 __interrupt void Port_2(void){
     switch( __even_in_range( P2IV, P2IV_P2IFG7 )) {
     case P2IV_P2IFG0:
-        button2Flag = 1;
+        button1Flag = 1;
         break;
     default:   _never_executed();
     }
 }
 
-// P1.5 and P1.4 interrupt PB3 PB4
+// P1.6 P1.5 and P1.4 interrupt PB2 PB3 PB4
 #pragma vector=PORT1_VECTOR
 __interrupt void Port_1(void){
     switch( __even_in_range( P1IV, P1IV_P1IFG7 )) {
@@ -250,11 +275,12 @@ __interrupt void Port_1(void){
         button4Flag = 1;
         break;
     case P1IV_P1IFG6:
-        button1Flag = 1;
+        button2Flag = 1;
         break;
     default:   _never_executed();
     }
 }
+*/
 
 // Timer0 A0 interrupt service routine
 #pragma vector=TIMER1_A0_VECTOR
