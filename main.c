@@ -8,7 +8,7 @@
 
 unsigned char read_val;
 unsigned char write_val;
-// Buttons on 1.4, 1.5, 3.7, 4.0
+// Buttons on 2.0 1.6 1.5 1.4
 int button1Flag = 0;
 int button2Flag = 0;
 int button3Flag = 0;
@@ -48,26 +48,19 @@ void init_msp430(){
     UCA0CTL1 &= ~UCSWRST; // Init state machine
     UCA0IE |= UCRXIE; // Enable USCI_A0 RX interrupts
 
-    // Button 3 and 4 init
-    P1REN |= BIT5 | BIT4; // Enable P1.1 internal resistor
-    P1OUT |= BIT5 | BIT4; // Set P1.1 as pull-Up resistor
-    P1IES &= ~BIT5 & ~BIT4; // P1.1 Lo/Hi edge
-    P1IFG &= ~BIT5 & ~BIT4; // P1.1 IFG cleared
-    P1IE |= BIT5 | BIT4; // P1.1 interrupt enabled
+    // Button 2 3 4 init
+    P1REN |= BIT5 | BIT4 | BIT6; // Enable P1.4 P1.5 P1.6 internal resistor
+    P1OUT |= BIT5 | BIT4 | BIT6; // Set P1.4 P1.5 P1.6 as pull-Up resistor
+    P1IES &= ~BIT5 & ~BIT4 & ~BIT6; // P1.4 P1.5 P1.6 Lo/Hi edge
+    P1IFG &= ~BIT5 & ~BIT4 & ~BIT6; // P1.4 P1.5 P1.6 IFG cleared
+    P1IE |= BIT5 | BIT4 | BIT6; // P1.4 P1.5 P1.5 interrupt enabled
 
     // Button 1 init
-    P3REN |= BIT7; // Enable P2.1 internal resistor
-    P3OUT |= BIT7; // Set P2.1 as pull-Up resistor
-    P3IES &= ~BIT7; // P2.1 Lo/Hi edge
-    P3IFG &= ~BIT7; // P2.1 IFG cleared
-    P3IE |= BIT7; // P2.1 interrupt enabled
-
-    // Button 2 init
-    P4REN |= BIT0; // Enable P2.1 internal resistor
-    P4OUT |= BIT0; // Set P2.1 as pull-Up resistor
-    P4IES &= ~BIT0; // P2.1 Lo/Hi edge
-    P4IFG &= ~BIT0; // P2.1 IFG cleared
-    P4IE |= BIT0; // P2.1 interrupt enabled
+    P2REN |= BIT0; // Enable P2.0 internal resistor
+    P2OUT |= BIT0; // Set P2.0 as pull-Up resistor
+    P2IES &= ~BIT0; // P2.0 Lo/Hi edge
+    P2IFG &= ~BIT0; // P2.0 IFG cleared
+    P2IE |= BIT0; // P2.0 interrupt enabled
 
     // Speaker init
     TA0CCR0 = 512-1;                          // PWM Period
@@ -235,22 +228,11 @@ void main (void){
     }
 }
 
-// P3.7 interrupt PB1
-#pragma vector=PORT3_VECTOR
-__interrupt void Port_3(void){
-    switch( __even_in_range( P3IV, P3IV_P3IFG7 )) {
-    case P3IV_P3IFG7:
-        button1Flag = 1;
-        break;
-    default:   _never_executed();
-    }
-}
-
 // P4.0 interrupt PB2
 #pragma vector=PORT2_VECTOR
 __interrupt void Port_2(void){
-    switch( __even_in_range( P4IV, P4IV_P2IFG7 )) {
-    case P4IV_P4IFG0:
+    switch( __even_in_range( P2IV, P2IV_P2IFG7 )) {
+    case P2IV_P2IFG0:
         button2Flag = 1;
         break;
     default:   _never_executed();
@@ -260,12 +242,15 @@ __interrupt void Port_2(void){
 // P1.5 and P1.4 interrupt PB3 PB4
 #pragma vector=PORT1_VECTOR
 __interrupt void Port_1(void){
-    switch( __even_in_range( P1IV, P1IV_P3IFG7 )) {
+    switch( __even_in_range( P1IV, P1IV_P1IFG7 )) {
     case P1IV_P1IFG5:
         button3Flag = 1;
         break;
     case P1IV_P1IFG4:
         button4Flag = 1;
+        break;
+    case P1IV_P1IFG6:
+        button1Flag = 1;
         break;
     default:   _never_executed();
     }
