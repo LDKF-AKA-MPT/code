@@ -85,15 +85,20 @@ float convertCoord(char* coordD, char* coordM) {
 void getCoords() {
     receiveflag = 0;    // end receiving
 
-    char latD[3];   // strings for lat degrees and minute
-    char latM[8];
-    char lonD[4];    // strings for lon degrees and minute
-    char lonM[8];
+    char* latD = (char*)malloc(sizeof(char)*4);   // strings for lat degrees and minute
+    char* latM = (char*)malloc(sizeof(char)*9);
+    char* lonD = (char*)malloc(sizeof(char)*5);    // strings for lon degrees and minute
+    char* lonM = (char*)malloc(sizeof(char)*9);
 
     unsigned int lati = 1;   // counters
     unsigned int loni = 1;
     unsigned int i;
 
+    latD[3] = '\0';
+    latM[8] = '\0';
+    lonD[4] = '\0';
+    lonM[8] = '\0';
+    
     latD[1] = buff[6];      // store latD
     latD[2] = buff[7];
 
@@ -126,7 +131,7 @@ void getCoords() {
     }
     else {
         lonD[0] = '+';
-        lonM[0] = '=';
+        lonM[0] = '+';
     }
     coords[2] = lonD;
     coords[3] = lonM;
