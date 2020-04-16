@@ -97,7 +97,7 @@ void init_msp430(){
     UCA0BR1 = 0x00;
     UCA0MCTL = UCBRS_7 + UCBRF_0; // UCBRSx is 7 and UCBRFx is 0
     UCA0CTL1 &= ~UCSWRST; // Init state machine
-    UCA0IE |= UCRXIE; // Enable USCI_A0 RX interrupts
+    //UCA0IE |= UCRXIE; // Enable USCI_A0 RX interrupts
 
 
     //LCD INIT
@@ -520,6 +520,8 @@ void __attribute__ ((interrupt(USCI_A0_VECTOR))) USCI_A0_ISR (void)
                 storeflag = 0;
                 counter = 0;
                 getCoords();
+                TA1CCTL0 = CCIE; // CCR0 interrupt enabled
+                UCA0IE &= ~UCRXIE;           // disable USCI_A0 RX interrupts
             }
             if (storeflag){
                 buff[counter] = temp;
@@ -549,14 +551,16 @@ __interrupt void Port_1(void){
         secondFlag = 0;
         speakerFlag = 0;
         P1DIR &= ~BIT2;
+        disable_timer();
         while(!(P1IN & BIT5)); // Wait for button to be unpressed
         if (firstFlag){
             firstFlag = 0;
             clear_lcd();
             str_wr("Saving Coords...");
+            counter = 0; //set buffer counter to 0
+            UCA0IE |= UCRXIE; // Enable USCI_A0 RX interrupts
             receiveflag = 1;
             button1Flag = 1; //write to eeprom
-            TA1CCTL0 = CCIE; // CCR0 interrupt enable
         } else if(firstFlag == 0 && button1Flag == 0) {
             clear_lcd();
             str_wr("Save current");
@@ -577,6 +581,7 @@ __interrupt void Port_2(void){
         firstFlag = 0;
         speakerFlag = 0;
         P1DIR &= ~BIT2;
+        disable_timer();
         while(!(P2IN & BIT0)); // Wait for button to be unpressed
         if (secondFlag){
             secondFlag = 0;
@@ -584,8 +589,9 @@ __interrupt void Port_2(void){
             clear_lcd();
             str_wr("Tracking...");
             read_coords();
+            counter = 0; //set buffer counter to 0
+            UCA0IE |= UCRXIE; // Enable USCI_A0 RX interrupts
             receiveflag = 1; //start recieving coordinates from GPS
-            TA1CCTL0 = CCIE; // CCR0 interrupt enabled
         } else if(secondFlag == 0 && button2Flag == 0) {
             clear_lcd();
             str_wr("Track previous");
@@ -622,6 +628,7 @@ void __attribute__ ((interrupt(TIMER1_A0_VECTOR))) TIMER1_A0_ISR (void)
         store_coords();
         clear_lcd();
         str_wr("Location Saved!");
+
     }
 
   }
