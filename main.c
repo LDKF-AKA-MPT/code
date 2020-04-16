@@ -1,4 +1,3 @@
-
 #include <msp430.h>
 #include <string.h>
 #include <stdio.h>
@@ -11,6 +10,10 @@ char buff[50] = {0};
 int counter = 0;     // buffer counter
 int receiveflag = 0; // start to receive message flag
 int storeflag = 0;   // start to store into buffer flag
+int firstFlag = 0; // Help with prof meyers shaky ass hands
+int secondFlag = 0; // Help with prof meyers shaky ass hands
+int speakerFlag = 0; //flag that sets the output of the speaker on
+int count = 0; //count for speaker output
 char* coords[4];
 char* saved_coords[4]; //coordinates read from eeprom
 float prev_latitude;
@@ -19,6 +22,7 @@ float curr_latitude;
 float curr_longitude;
 float distance;
 float bearing;
+char* direction;
 char dist[11];
 int filled = 0;
 
@@ -95,6 +99,7 @@ void init_msp430(){
     UCA0CTL1 &= ~UCSWRST; // Init state machine
     UCA0IE |= UCRXIE; // Enable USCI_A0 RX interrupts
 
+
     //LCD INIT
    // UCSCTL5 |= DIVS0 + DIVS2; // SMCLK = fSMCLK/32
    // UCSCTL5 |= DIVM0 + DIVM2; // MLCK = fMCLK/32
@@ -127,6 +132,16 @@ void init_msp430(){
     //TIMER INIT
     TA1CCR0 = 65536-1;
     TA1CTL = TASSEL_2 + MC_1 + TACLR;
+
+    //Piezo Buzzer INIT
+    P1DIR &= ~BIT2;                            // P1.2 output
+    P1SEL |= BIT2;                            // P1.2 options select
+
+    //PWM OUTPUT
+    TA0CCR0 = 32-1;                          // PWM Period
+    TA0CCTL1 = OUTMOD_7;                      // CCR1 reset/set
+    TA0CCR1 = 16;                            // CCR1 PWM duty cycle
+    TA0CTL = TASSEL_2 + MC_1 + TACLR;         // SMCLK, up mode, clear TAR
 
 }
 
@@ -317,6 +332,46 @@ void getCoords() {
     //longitude = convertCoord(coords[2], coords[3]);
     filled = 1;
 }
+char* calc_direction(){
+    char* dir = (char*)malloc(sizeof(char)*2);
+    float deg;
+    int degree;
+    deg = bearing * 180 / Pi;
+    degree = ((int)(deg) + 360) % 360;
+    if (degree > 330 || degree <= 30){
+        dir[0] = ' ';
+        dir[1] = 'N';
+    }
+    else if (degree > 30 && degree <= 60){
+        dir[0] = 'N';
+        dir[1] = 'E';
+    }
+    else if (degree > 60 && degree <= 120){
+        dir[0] = ' ';
+        dir[1] = 'E';
+    }
+    else if (degree > 120 && degree <= 150){
+        dir[0] = 'S';
+        dir[1] = 'E';
+    }
+    else if (degree > 150 && degree <= 210){
+        dir[0] = ' ';
+        dir[1] = 'S';
+    }
+    else if (degree > 210 && degree <= 240){
+        dir[0] = 'S';
+        dir[1] = 'W';
+    }
+    else if (degree > 240 && degree <= 300){
+        dir[0] = ' ';
+        dir[1] = 'W';
+    }
+    else if (degree > 300 && degree <= 330){
+        dir[0] = 'N';
+        dir[1] = 'W';
+    }
+    return dir;
+}
 void store_coords()
 {
 
@@ -408,14 +463,15 @@ int main(void)
     init_msp430();
     init_lcd();
     clear_lcd();
-    str_wr("Start Of Program");
+    str_wr("   Welcome to   ");
+    new_line();
+    str_wr("      MPT      ");
     initGPS();
     __delay_cycles(100);
     setRate();
     __delay_cycles(100);
     disableUnused();
     sendQuery();
-    //while (!(P2IN & 0x01)); // wait for gps to fix coords
     //receiveflag = 1;
 
 /*
@@ -447,23 +503,23 @@ void __attribute__ ((interrupt(USCI_A0_VECTOR))) USCI_A0_ISR (void)
 #error Compiler not supported!
 #endif
 {
+   /* TA1CCTL0 &= ~CCIE;                //disable timer interrupt - CCR0
+    P1IE &= ~BIT5;                    // P1.5 interrupt disabled
+    P2IE &= ~BIT0;                    //P2.0 interrupt disabled
+    P1IFG &= ~BIT5;                     //clear flag
+    P2IFG &= ~BIT0;                     //clear flag
+    */
     char temp;
     switch(__even_in_range(UCA0IV,4))
     {
     case 0:break;                             // Vector 0 - no interrupt
     case 2:                                   // Vector 2 - RXIFG
         if (receiveflag){                     // if receiving
-            //TA1CCTL0 &= ~CCIE;                //disable timer interrupt - CCR0
-           // P1IE &= ~BIT5;                    // P1.5 interrupt disabled
-           // P2IE &= ~BIT0;                    //P2.0 interrupt disabled
             temp = UCA0RXBUF;
             if (temp == '*') {               // stop storing if useful info ends
                 storeflag = 0;
                 counter = 0;
                 getCoords();
-                //TA1CCTL0 = CCIE;              // CCR0 interrupt enabled
-                //P1IE |= BIT5;                    // P1.5 interrupt enabled
-                //P2IE |= BIT0;                    //P2.0 interrupt enabled
             }
             if (storeflag){
                 buff[counter] = temp;
@@ -477,7 +533,12 @@ void __attribute__ ((interrupt(USCI_A0_VECTOR))) USCI_A0_ISR (void)
         break;
     case 4:break;                             // Vector 4 - TXIFG
     default: break;
+
   }
+    /*
+    TA1CCTL0 = CCIE;              // CCR0 interrupt enabled
+    P1IE |= BIT5;                    // P1.5 interrupt enabled
+    P2IE |= BIT0;                    //P2.0 interrupt enabled */
 }
 
 // PB1.5 interrupt PB1
@@ -485,10 +546,24 @@ void __attribute__ ((interrupt(USCI_A0_VECTOR))) USCI_A0_ISR (void)
 __interrupt void Port_1(void){
     switch( __even_in_range( P1IV, P1IV_P1IFG7 )) {
     case P1IV_P1IFG5:
+        secondFlag = 0;
+        speakerFlag = 0;
+        P1DIR &= ~BIT2;
         while(!(P1IN & BIT5)); // Wait for button to be unpressed
-        receiveflag = 1;
-        button1Flag = 1; //write to eeprom
-        TA1CCTL0 = CCIE; // CCR0 interrupt enabled
+        if (firstFlag){
+            firstFlag = 0;
+            clear_lcd();
+            str_wr("Saving Coords...");
+            receiveflag = 1;
+            button1Flag = 1; //write to eeprom
+            TA1CCTL0 = CCIE; // CCR0 interrupt enable
+        } else if(firstFlag == 0 && button1Flag == 0) {
+            clear_lcd();
+            str_wr("Save current");
+            new_line();
+            str_wr("coordinates?");
+            firstFlag = 1;
+        }
         break;
     default:   _never_executed();
     }
@@ -499,11 +574,25 @@ __interrupt void Port_1(void){
 __interrupt void Port_2(void){
     switch( __even_in_range( P2IV, P2IV_P2IFG7 )) {
     case P2IV_P2IFG0:
+        firstFlag = 0;
+        speakerFlag = 0;
+        P1DIR &= ~BIT2;
         while(!(P2IN & BIT0)); // Wait for button to be unpressed
-        button2Flag = 1; //read from eeprom
-        read_coords();
-        receiveflag = 1; //start recieving coordinates from GPS
-        TA1CCTL0 = CCIE; // CCR0 interrupt enabled
+        if (secondFlag){
+            secondFlag = 0;
+            button2Flag = 1; //read from eeprom
+            clear_lcd();
+            str_wr("Tracking...");
+            read_coords();
+            receiveflag = 1; //start recieving coordinates from GPS
+            TA1CCTL0 = CCIE; // CCR0 interrupt enabled
+        } else if(secondFlag == 0 && button2Flag == 0) {
+            clear_lcd();
+            str_wr("Track previous");
+            new_line();
+            str_wr("location?");
+            secondFlag = 1;
+        }
         break;
     default:   _never_executed();
     }
@@ -521,12 +610,25 @@ void __attribute__ ((interrupt(TIMER1_A0_VECTOR))) TIMER1_A0_ISR (void)
 {
   if(filled && button1Flag){
     button1Flag = 0;
+    speakerFlag = 0;
     filled = 0;
-    store_coords();
+    if(buff[0] == '\x00'){
+        clear_lcd();
+        str_wr("Please try");
+        new_line();
+        str_wr("saving again!");
+    }
+    else{
+        store_coords();
+        clear_lcd();
+        str_wr("Location Saved!");
+    }
+
   }
   else if(filled && button2Flag)
   {
      button2Flag = 0;
+     speakerFlag = 0;
      filled = 0;
      prev_latitude = convertCoord(saved_coords[0], saved_coords[1]);
      prev_longitude = convertCoord(saved_coords[2], saved_coords[3]);
@@ -538,6 +640,11 @@ void __attribute__ ((interrupt(TIMER1_A0_VECTOR))) TIMER1_A0_ISR (void)
      str_wr("DIST:");
      ftoa(distance, dist, 2);
      str_wr(dist);
+     str_wr(" m");
+     new_line();
+     str_wr("DIR: ");
+     direction = calc_direction();
+     str_wr(direction);
      free(saved_coords[0]);
      free(saved_coords[1]);
      free(saved_coords[2]);
@@ -546,378 +653,45 @@ void __attribute__ ((interrupt(TIMER1_A0_VECTOR))) TIMER1_A0_ISR (void)
      free(coords[1]);
      free(coords[2]);
      free(coords[3]);
-     disable_timer();
+     free(direction);
+     //disable_timer();
      button2Flag = 0;
+     speakerFlag = 1;
 
   }
+  else if(speakerFlag){
+      if (counter >= 1) {
+              if (P1DIR & BIT2) {
+                  P1DIR &= 0xfb;      //turn off output
+              }
+              else {
+                  P1DIR |= BIT2;      //turn on output
+              }
+              counter = 0;
+              if (distance > 100000) {        //change frequency according to distance
+                  TA1CCR0 = 65536-1;
+              }
+              else if (distance > 10000) {
+                  TA1CCR0 = 32768-1;
+              }
+              else if (distance > 1000){
+                  TA1CCR0 = 16384-1;
+              }
+              else if (distance > 100){
+                  TA1CCR0 = 8192-1;
+              }
+              else if (distance <= 100){
+                  TA1CCR0 = 2048-1;
+              }
+              else if (distance <= 10){
+                TA1CCR0 = 512-1;
+              }
+              else {
+                  P1DIR |= BIT2;
+              }
+          }
+          counter ++;
+      }
+
 
 }
-
-/*
-#include <msp430.h>
-#include "I2Croutines.h"
-
-unsigned char read_val = 54;
-unsigned char write_val;
-int button2Flag = 0;
-int button4Flag = 0;
-int button1Flag = 0;
-int button3Flag = 0;
-int counter = 0;
-int i = 0;
-int distance = 1000;
-
-
-void data_wr(unsigned char data){
-    P1OUT &= ~BIT3; //SS = 0;
-    while(!(UCB1IFG&UCTXIFG)); // Wait for TX buffer ready
-    UCB1TXBUF = data; // Fill and send buffer
-    __delay_cycles(100); // Wait for buffer to send
-    // Pulse clock, Data is sent on rising edge
-    P4OUT &= ~BIT3; //SCL = 0;
-    __delay_cycles(500);
-    P4OUT |= BIT3; //SCL = 1;
-    P1OUT |= BIT3; //SS = 1;
-}
-
-void str_wr(char* data){
-    int i;
-    int strLen = strlen(data);
-    for(i = 0; i < strLen; i++){
-        data_wr(data[i]);
-    }
-}
-
-void init_msp430(){
-    WDTCTL = WDTPW + WDTHOLD;
-    __bis_SR_register( GIE ); // Let interupts be global
-
-    //UCSCTL2 |= FLLD1 + FLLD0; // Set clock divided by 8
-    // Set Clocks
-    UCSCTL5 |= DIVS0 + DIVS2; // SMCLK = fSMCLK/32
-    UCSCTL5 |= DIVM0 + DIVM2; // MLCK = fMCLK/32
-
-    P4SEL |= BIT1 + BIT2 + BIT3; // SPI pins 4.1 (UCB1SIMO), 4.2 (UCB1SOMI) 4.3 (UCB1CLK)
-    P1DIR |= BIT3; // P1.3 for Slave Select
-
-    UCB1CTL1 |= UCSWRST; // Reset state machine
-    UCB1CTL0 |= UCMST + UCSYNC + UCCKPL + UCMSB; // UCMST (Master), UCSYNC (SPI), UCCKPL (Clock Polarity), UCMSB (Active State High)
-    UCB1CTL0 &= ~(BIT1 + BIT2); // 3-pin SPI mode for UCSYNC
-    UCB1CTL1 |= UCSSEL_2; // SMCLK
-    UCB1BR0 = 0x02; // Set baud rate for UCB1
-    UCB1BR1 = 0;
-    UCB1CTL1 &= ~UCSWRST; // Init state machine
-
-    // Button 3 and 4 init
-    P1REN |= BIT5; // Enable P1.4/5 internal resistor
-    P1OUT |= BIT5; // Set P1.4/5 as pull-Up resistor
-    P1IES &= ~BIT5; // P1.4/5 Lo/Hi edge
-    P1IFG &= ~BIT5; // P1.4/5 IFG cleared
-    P1IE |= BIT5; // P1.4/5 interrupt enabled
-
-    P1REN |= BIT6; // Enable P1.4/5 internal resistor
-    P1OUT |= BIT6; // Set P1.4/5 as pull-Up resistor
-    P1IES &= ~BIT6; // P1.4/5 Lo/Hi edge
-    P1IFG &= ~BIT6; // P1.4/5 IFG cleared
-    P1IE |= BIT6; // P1.4/5 interrupt enabled
-
-    // Button 1 init
-    P2REN |= BIT0; // Enable P2.0 internal resistor
-    P2OUT |= BIT0; // Set P2.0 as pull-Up resistor
-    P2IES &= ~BIT0; // P2.0 Lo/Hi edge
-    P2IFG &= ~BIT0; // P2.0 IFG cleared
-    P2IE |= BIT0; // P2.0 interrupt enabled
-
-    // Button 1 init
-    P2REN |= BIT2; // Enable P2.0 internal resistor
-    P2OUT |= BIT2; // Set P2.0 as pull-Up resistor
-    P2IES &= ~BIT2; // P2.0 Lo/Hi edge
-    P2IFG &= ~BIT2; // P2.0 IFG cleared
-    P2IE |= BIT2; // P2.0 interrupt enabled
-
-    /* DO NOT USE
-    // Button 1 init
-    P3REN |= BIT7; // Enable P3.1 internal resistor
-    P3OUT |= BIT7; // Set P2.1 as pull-Up resistor
-    P3IES &= ~BIT7; // P2.1 Lo/Hi edge
-    P3IFG &= ~BIT7; // P2.1 IFG cleared
-    P3IE |= BIT7; // P2.1 interrupt enabled
-
-    // Button 2 init
-    P4REN |= BIT0; // Enable P2.1 internal resistor
-    P4OUT |= BIT0; // Set P2.1 as pull-Up resistor
-    P4IES &= ~BIT0; // P2.1 Lo/Hi edge
-    P4IFG &= ~BIT0; // P2.1 IFG cleared
-    P4IE |= BIT0; // P2.1 interrupt enabled
-*/
-    //__bis_SR_register(LPM0_bits+GIE);             // Enter LPM0
-    //__no_operation();// For debugger
-/*
-}
-
-void clear_lcd(){
-    data_wr(0xFE); // Command Prompt
-    data_wr(0x51); // Clear Screen
-    data_wr(0xFE); // Command Prompt
-    data_wr(0x46); // Move Cursor to Start
-}
-
-void init_lcd(){
-    data_wr(0xFE); // Command Prompt
-    data_wr(0x42); // Display Off
-    data_wr(0xFE); // Command Prompt
-    data_wr(0x52); // Set Contrast
-    data_wr(0x28); // contrast 1 - 50
-    //data_wr(0xFE); // Command Prompt
-    //data_wr(0x53); // Set Brightness
-    //data_wr(0x0F); // backlight 1 - 15
-    data_wr(0xFE); // Command Prompt
-    data_wr(0x48); // Underline Cursor Off
-    data_wr(0xFE); // Command Prompt
-    data_wr(0x4B); // Blinking Cursor On
-    data_wr(0xFE); // Command Prompt
-    data_wr(0x46); // Move Cursor to Start
-    data_wr(0xFE); // Command Prompt
-    data_wr(0x41); // Display On
-}
-
-void new_line(){
-    data_wr(0xFE);
-    data_wr(0x45);
-    data_wr(0x40);
-}
-
-void init_speaker(){
-    P1DIR |= BIT2;                            // P1.2 output
-    P1SEL |= BIT2;                            // P1.2 options select
-
-    TA0CCR0 = 32-1;                          // PWM Period
-    TA0CCTL1 = OUTMOD_7;                      // CCR1 reset/set
-    TA0CCR1 = 16;                            // CCR1 PWM duty cycle
-    TA0CTL = TASSEL_2 + MC_1 + TACLR;         // SMCLK, up mode, clear TAR
-
-}
-
-int main(void)
-{
-    WDTCTL = WDTPW + WDTHOLD; // Stop watchdog timer
-    init_speaker(); //intialize speaker
-    InitI2C(0x50); // Initialize I2C module
-    init_msp430();
-    init_lcd();
-    clear_lcd();
-    //data_wr(0xFE);
-    //data_wr(0x71); // Baud rate display
-    str_wr("Start Of Program");
-    write_val = 0x30;
-    //init_speaker();
-    while(1){
-        counter ++;
-        if (button1Flag){
-            EEPROM_ByteWrite(0x0000,write_val);
-            EEPROM_AckPolling();
-            clear_lcd();
-            str_wr("Data written to");
-            new_line();
-            str_wr("EEPROM: ");
-            data_wr(write_val);
-            write_val++;
-            if (write_val == ':'){
-                write_val = 0x30;
-            }
-            button1Flag = 0;
-
-        }
-        if (button4Flag){
-            read_val = EEPROM_RandomRead(0x0000);
-            clear_lcd();
-            str_wr("Data read from");
-            new_line();
-            str_wr("EEPROM: ");
-            data_wr(read_val);
-            button4Flag = 0;
-
-        }
-
-        if (counter >= distance & distance != 0) {
-                if (P1DIR & BIT2) {
-                    P1DIR &= 0xfb;      //turn off output
-                }
-                else {
-                    P1DIR |= BIT2;      //turn on output
-                }
-                counter = 0;
-                if (read_val == 49) {        //change frequency according to distance
-                    TA1CCR0 = 256-1;
-                    distance = 0;
-                }
-                else if (read_val == 51) {
-                    TA1CCR0 = 128-1;
-                    distance = 200;
-                }
-                else if (read_val == 53){
-                    TA1CCR0 = 64-1;
-                    distance = 400;
-                }
-                else if (read_val == 55){
-                    TA1CCR0 = 32-1;
-                    distance = 600;
-                }
-                else if (read_val == 57){
-                    TA1CCR0 = 16-1;
-                    distance = 800;
-                }
-
-            }
-            if(read_val == 49)
-            {
-                P1DIR |= BIT2;      //turn on output
-                distance = 1000;
-            }
-    }
-
-}
-
-// PB1.5 interrupt PB1
-#pragma vector=PORT1_VECTOR
-__interrupt void Port_1(void){
-    switch( __even_in_range( P1IV, P1IV_P1IFG7 )) {
-    case P1IV_P1IFG5:
-        button1Flag = 1; //write to eeprom
-        break;
-    case P1IV_P1IFG6:
-        button3Flag = 1; //random
-        break;
-    default:   _never_executed();
-    }
-}
-
-// P2.0 interrupt PB2
-#pragma vector=PORT2_VECTOR
-__interrupt void Port_2(void){
-    switch( __even_in_range( P2IV, P2IV_P2IFG7 )) {
-    case P2IV_P2IFG0:
-        button4Flag = 1; //read from eeprom
-        break;
-    case P2IV_P2IFG2:
-        button2Flag = 1;
-        break;
-    default:   _never_executed();
-    }
-}
-/*
-// P2.0 interrupt PB1
-//#pragma vector=PORT2_VECTOR
-__interrupt void Port_2(void){
-    if (P2IFG & BIT0){
-        button1Flag = 1;
-
-    }
-}
-
-// P1.6 P1.5 and P1.4 interrupt PB2 PB3 PB4
-//#pragma vector=PORT1_VECTOR
-__interrupt void Port_1(void){
-    if (P1IFG & BIT5){
-        button3Flag = 1;
-
-    } else if (P1IFG & BIT4){
-        button4Flag = 1;
-
-    } else if (P1IFG & BIT6){
-        button2Flag = 1;
-
-    }
-}
-*/
-/*
-#include <msp430.h>
-int distance = 12;
-int counter = 0;
-
-int main(void)
-{
-    /*
-  WDTCTL = WDTPW + WDTHOLD;                 // Stop WDT
-  P1DIR |= BIT2;                            // P1.2 output
-  P1SEL |= BIT2;                            // P1.2 options select
-
-  P1DIR |= BIT0; // Set P1.0 as output
-  P1OUT &= ~BIT0; // Initally led off
-/*
-  P1REN |= BIT1; // Enable P1.1 internal resistor
-  P1OUT |= BIT1; // Set P1.1 as pull-Up resistor
-  P1IES &= ~BIT1; // P1.1 Lo/Hi edge
-  P1IFG &= ~BIT1; // P1.1 IFG cleared
-  P1IE |= BIT1; // P1.1 interrupt enabled
-*//*
-  TA0CCR0 = 512-1;                          // PWM Period
-  TA0CCTL1 = OUTMOD_7;                      // CCR1 reset/set
-  TA0CCR1 = 256;                            // CCR1 PWM duty cycle
-  TA0CTL = TASSEL_2 + MC_1 + TACLR;         // SMCLK, up mode, clear TAR
-
-  TA1CCTL0 = CCIE;                          // CCR0 interrupt enabled
-  TA1CCR0 = 65536-1;
-  TA1CTL = TASSEL_2 + MC_1 + TACLR;
-/*  while (1) {
-      scanf("%d", &distance);
-  }*/
-  //__bis_SR_register(LPM0_bits+GIE);             // Enter LPM0
-  //__no_operation();                         // For debugger
-//}
-/*
-// Timer0 A0 interrupt service routine
-#if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
-#pragma vector=TIMER1_A0_VECTOR
-__interrupt void TIMER1_A0_ISR(void)
-#elif defined(__GNUC__)
-void __attribute__ ((interrupt(TIMER1_A0_VECTOR))) TIMER1_A0_ISR (void)
-#else
-#error Compiler not supported!
-#endif
-{
-    if (counter >= 9) {
-        if (P1DIR & BIT2) {
-            P1DIR &= 0xfb;      //turn off output
-        }
-        else {
-            P1DIR |= BIT2;      //turn on output
-        }
-        counter = 0;
-        if (distance > 10) {        //change frequency according to distance
-            TA1CCR0 = 65536-1;
-        }
-        else if (distance > 8) {
-            TA1CCR0 = 32768-1;
-        }
-        else if (distance > 6){
-            TA1CCR0 = 16384-1;
-        }
-        else if (distance > 4){
-            TA1CCR0 = 8192-1;
-        }
-        else if (distance > 2){
-            TA1CCR0 = 4096-1;
-        }
-        else {
-            P1DIR |= BIT2;
-        }
-    }
-    counter ++;
-}
-
-#pragma vector=PORT1_VECTOR
-__interrupt void Port_1(void)
-{
-    switch( __even_in_range( P1IV, P1IV_P1IFG7 )) {
-    case P1IV_P1IFG1:
-        distance -= 1;
-        if (distance < 1) {
-            distance = 12;
-        }
-        P1OUT^=BIT0;
-        break;
-    default:   _never_executed();
-    }
-}
-*/
