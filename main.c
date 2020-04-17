@@ -13,6 +13,7 @@ int storeflag = 0;   // start to store into buffer flag
 int firstFlag = 0; // Help with prof meyers shaky ass hands
 int secondFlag = 0; // Help with prof meyers shaky ass hands
 int speakerFlag = 0; //flag that sets the output of the speaker on
+int brightness = 0;
 int count = 0; //count for speaker output
 char* coords[4];
 char* saved_coords[4]; //coordinates read from eeprom
@@ -69,7 +70,7 @@ void init_lcd(){
     data_wr(0x28); // contrast 1 - 50
     //data_wr(0xFE); // Command Prompt
     //data_wr(0x53); // Set Brightness
-    //data_wr(0x0F); // backlight 1 - 15
+    //data_wr(0x01); // backlight 1 - 15
     data_wr(0xFE); // Command Prompt
     data_wr(0x48); // Underline Cursor Off
     data_wr(0xFE); // Command Prompt
@@ -128,6 +129,19 @@ void init_msp430(){
     P2IES &= ~BIT0; // P2.0 Lo/Hi edge
     P2IFG &= ~BIT0; // P2.0 IFG cleared
     P2IE |= BIT0; // P2.0 interrupt enabled
+
+    //Button 4 setup
+    P2REN |= BIT2; // Enable P2.0 internal resistor
+    P2OUT |= BIT2; // Set P2.0 as pull-Up resistor
+    P2IES &= ~BIT2; // P2.0 Lo/Hi edge
+    P2IFG &= ~BIT2; // P2.0 IFG cleared
+    P2IE |= BIT2; // P2.0 interrupt enabled
+
+    //Directive Input
+    P2REN |= BIT4;
+    P2OUT |= BIT4; // Set P2.0 as pull-Up resistor
+    P2IES &= ~BIT4; // P2.0 Lo/Hi edge
+
 
     //TIMER INIT
     TA1CCR0 = 65536-1;
@@ -472,6 +486,19 @@ int main(void)
     __delay_cycles(100);
     disableUnused();
     sendQuery();
+    clear_lcd();
+    str_wr("Wait for fixed");
+    new_line();
+    str_wr("GPS location!");
+    _delay_cycles(50000);
+    while(!(P2IN & BIT4)); // wait for gps to fix coords
+    clear_lcd();
+    str_wr("GPS FIXED!");
+    __delay_cycles(50000);
+    clear_lcd();
+    str_wr("   Welcome to   ");
+    new_line();
+    str_wr("      MPT      ");
     //receiveflag = 1;
 
 /*
@@ -571,6 +598,7 @@ __interrupt void Port_1(void){
         break;
     default:   _never_executed();
     }
+    __delay_cycles(50000);
 }
 
 // P2.0 interrupt PB2
@@ -600,8 +628,29 @@ __interrupt void Port_2(void){
             secondFlag = 1;
         }
         break;
+    case P2IV_P2IFG2:
+        while(!(P2IN & BIT2)); // Wait for button to be unpressed
+        clear_lcd();
+        if(speakerFlag){
+            P1DIR &= ~BIT2;
+            speakerFlag = 0;
+            str_wr("Tracking ended!");
+            __delay_cycles(50000);
+        }
+        clear_lcd();
+        speakerFlag = 0;
+        secondFlag = 0;
+        firstFlag = 0;
+        disable_timer();
+        button1Flag = 0;
+        button2Flag = 0;
+        str_wr("   Welcome to   ");
+        new_line();
+        str_wr("      MPT      ");
+        break;
     default:   _never_executed();
     }
+    __delay_cycles(50000);
 }
 
 //TIMER INTERUPT
@@ -675,23 +724,33 @@ void __attribute__ ((interrupt(TIMER1_A0_VECTOR))) TIMER1_A0_ISR (void)
                   P1DIR |= BIT2;      //turn on output
               }
               counter = 0;
-              if (distance > 100000) {        //change frequency according to distance
-                  TA1CCR0 = 65536-1;
+              if (distance <= 100000) {        //change frequency according to distance
+                  TA1CCR0 = 65536 - 1;
               }
-              else if (distance > 10000) {
-                  TA1CCR0 = 32768-1;
+              if (distance <= 10000) {
+                  TA1CCR0 = 32768 - 1;
               }
-              else if (distance > 1000){
-                  TA1CCR0 = 16384-1;
+              if (distance <= 1000){
+                  TA1CCR0 = 16384 - 1;
               }
-              else if (distance > 100){
-                  TA1CCR0 = 8192-1;
+              if(distance <= 500){
+                  TA1CCR0 = 8192 - 1;
               }
-              else if (distance <= 100){
-                  TA1CCR0 = 2048-1;
+              if (distance <= 250){
+                  TA1CCR0 = 4096 - 1;
               }
-              else if (distance <= 10){
-                TA1CCR0 = 512-1;
+              if (distance <= 100){
+                  TA1CCR0 = 2048 - 1;
+              }
+              if (distance <= 50){
+                  TA1CCR0 = 1024- 1;
+              }
+              if(distance <= 10){
+                  TA1CCR0 = 512 - 1;
+              }
+              if(distance <= 5){
+                  P1DIR |= BIT2;
+                  disable_timer();
               }
               else {
                   P1DIR |= BIT2;
