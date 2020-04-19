@@ -92,7 +92,8 @@ void init_msp430(){
     WDTCTL = WDTPW | WDTHOLD;   // stop watchdog timer
     P3SEL |= BIT3 + BIT4; // Select P3.3 for USCI_A0 TXD and P3.4 for USCI_A0 RXD
     UCA0CTL1 |= UCSWRST; // Reset state machine
-    UCSCTL4 &= !SELS_4; // Use XT1 oscillator as SMCLK source
+    UCSCTL4 &= ~SELS_4; // Use XT1 oscillator as SMCLK source
+    UCSCTL4 |= SELA_4;  // Use DCOCLKCIV as ACLK source
     UCA0CTL1 |= UCSSEL_2; // SMCLK
     UCA0BR0 = 0x06; // Baud Rate to 4800
     UCA0BR1 = 0x00;
