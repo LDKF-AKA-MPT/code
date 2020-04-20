@@ -14,9 +14,8 @@
 void hdq_init(void){
 
     // Init Timer A
-    TA0CTL = 0;                 // Zero Out
-    TA0CTL = BIT4+BIT8;       // Up Mode//ACLK
-    //TA0CCR0 = 250-1;            // 200 us
+    TBCTL = 0;                  // Zero Out
+    TB0CTL = BIT4+BIT8;         // Up Mode+ACLK Source
 
     // Init P1.0 Output
     P2DIR &= ~BIT3;             // INPUT
@@ -98,6 +97,7 @@ uint16_t cc_dataread(uint8_t addr){
     return data;
 }
 
+// Useless rn
 void cc_clear(uint8_t addr) {
     if(addr==0x7E){
         hdq_send(0x74,0x01);
@@ -128,7 +128,7 @@ uint8_t hdq_rec(uint8_t addr){
     static uint16_t t1  = 30;    // one time
     static uint16_t t0  = 150;   // zero time
     static uint16_t tc  = 210;   // bit period
-    TA0CCR0 = 220-1;             // Timer Rollover
+    TB0CCR0 = 220-1;             // Timer Rollover
 
 
     // Send Addr.
@@ -136,40 +136,40 @@ uint8_t hdq_rec(uint8_t addr){
         ////////// Start /////////
 
         // Break to start transmission
-        TA0CTL |= TACLR;
+        TB0CTL |= TBCLR;
         P2OUT &= ~BIT3;
-        while(TA0R <= tb){
+        while(TB0R <= tb){
             P2DIR |= BIT3;              // Start break (low)
         }
         P2DIR &= ~BIT3;                 // end break (high)
         __delay_cycles(40);
-        TA0CTL |= TACLR;
+        TB0CTL |= TBCLR;
         for(i=0;i<pack_size;i++){
             bts = mask & addr_send;          // Set send bit
             P2DIR |= BIT3;
             if(bts == 0x01){
-                while(TA0R < t1);
+                while(TB0R < t1);
                 P2DIR &= ~BIT3;         // Set to input (high)
-                while(TA0R < tc);
+                while(TB0R < tc);
             } else {
-                while(TA0R < t0);
+                while(TB0R < t0);
                 P2DIR &= ~BIT3;         // Set to input (high)
                 if(i==7){
-                    TA0CCR0 =1600-1;
-                    TA0CTL |= TACLR;
+                    TB0CCR0 =1600-1;
+                    TB0CTL |= TBCLR;
                     break;
                 }
-                while(TA0R < tc);
+                while(TB0R < tc);
             }
             addr_send = addr >> (i+1);
         }
         P2DIR &= ~BIT3;             // Set to input
 
         // Wait for response
-        while(TA0R < 1500-1){
+        while(TB0R < 1500-1){
             if((P2IN&BIT3)==0){     // Response received
-                TA0CTL |= TACLR;    // Reset timer
-                TA0CCR0 = 220-1;    // set bit period
+                TB0CTL |= TBCLR;    // Reset timer
+                TB0CCR0 = 220-1;    // set bit period
                 cc_resp = 1;        // flag for no-timeout
                 break;
             }
@@ -177,16 +177,16 @@ uint8_t hdq_rec(uint8_t addr){
         if(cc_resp){
             break;  // Need to leave try loop
         }
-        TA0CCR0=250-1;
+        TB0CCR0=250-1;
         try_count++;    // didn't work
     }
 
     // Packet recieving loop
     for(i=0;i<pack_size;i++){
-        while(TA0R < 50-1);   // Wait to get data
+        while(TB0R < 50-1);   // Wait to get data
         data |= (P2IN & BIT3)<<4;    //
         data = (i==7) ? data : data >> 1;
-        while(TA0R < 215-1);
+        while(TB0R < 215-1);
     }
 
     /*if(try_count == 7){
@@ -210,47 +210,47 @@ void hdq_send(uint8_t addr, uint8_t data){
        static uint16_t t1  = 30;    // one time
        static uint16_t t0  = 150;   // zero time
        static uint16_t tc  = 210;   // bit period
-       TA0CCR0 = 220-1;             // Timer Rollover
+       TB0CCR0 = 220-1;             // Timer Rollover
 
 
         // Break to start transmission
         P2OUT &= ~BIT3;
-        TA0CTL |= TACLR;
-        while(TA0R <= tb){
+        TB0CTL |= TBCLR;
+        while(TB0R <= tb){
             P2DIR |= BIT3;              // Start break (low)
         }
         P2DIR &= ~BIT3;                 // end break (high)
         __delay_cycles(40);
 
         // Send Addr.
-        TA0CTL |= TACLR;
+        TB0CTL |= TBCLR;
         for(i=0;i<pack_size;i++){
            bts = mask & addr;          // Set send bit
             P2DIR |= BIT3;
             if(bts == 0x01){
-                while(TA0R < t1);
+                while(TB0R < t1);
                 P2DIR &= ~BIT3;         // Set to input (high)
-                while(TA0R < tc);
+                while(TB0R < tc);
             } else {
-                while(TA0R < t0);
+                while(TB0R < t0);
                 P2DIR &= ~BIT3;         // Set to input (high)
-                while(TA0R < tc);
+                while(TB0R < tc);
             }
             addr = addr >> 1;
         }
         _delay_cycles(50);  // Delay for better transmission
-        TA0CTL |= TACLR;    // Clear to start new cycle
+        TB0CTL |= TBCLR;    // Clear to start new cycle
         for(i=0;i<pack_size;i++){
                bts = mask & data;          // Set send bit
                P2DIR |= BIT3;
                if(bts == 0x01){
-                   while(TA0R < t1);
+                   while(TB0R < t1);
                    P2DIR &= ~BIT3;         // Set to input (high)
-                   while(TA0R < tc);
+                   while(TB0R < tc);
                } else {
-                   while(TA0R < t0);
+                   while(TB0R < t0);
                    P2DIR &= ~BIT3;         // Set to input (high)
-                   while(TA0R < tc);
+                   while(TB0R < tc);
                }
                data = data >> 1;
          }
