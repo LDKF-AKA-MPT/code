@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+// http://www.ti.com/lit/zip/slaa208
 #include "I2Croutines.h"
 #define Pi 3.14159265359
 
