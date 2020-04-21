@@ -2,14 +2,24 @@
 #include <stdint.h>
 #include "hdq_comm.h"
 #include "I2Croutines.h"
-
+#include <math.h>
 /*
  * hdq_comm.c
  *
  *  Created on: Feb 25, 2020
  *      Author: Daniel Meulbroek
  */
-
+int curr_dcr=0;
+int curr_dtr=0;
+int charge_diss=0;
+int diss_hours=0;
+int total_scurrent=0;
+int scurrent_div=0;
+int scurrent=0;
+int data_dcr_old=0;
+int data_dtr_old=0;
+int charge_old=0;
+int charge_new=0;
 
 void hdq_init(void){
 
@@ -25,60 +35,68 @@ void hdq_init(void){
 }
 
 uint16_t cc_update(void){
-    // Get new DCR and DTR values
-    uint16_t data_dcr=cc_dataread(0x7E);
-    uint16_t data_dtr=cc_dataread(0x78);
+    int i=0;
 
+    // Get new DCR and DTR values
+    curr_dcr=(int)cc_dataread(0x7E);
+    curr_dtr=(int)cc_dataread(0x78);
 
     // Get old values
-    uint16_t data_dcr_old = (uint16_t)EEPROM_RandomRead(0x0001);
+    data_dcr_old = EEPROM_RandomRead(0x0421);
     data_dcr_old = data_dcr_old << 8;
-    data_dcr_old |= (uint16_t)EEPROM_RandomRead(0x0000);
-    uint16_t data_dtr_old = (uint16_t)EEPROM_RandomRead(0x0003);
+    data_dcr_old |= EEPROM_RandomRead(0x0420);
+    data_dtr_old = EEPROM_RandomRead(0x0423);
     data_dtr_old = data_dtr_old << 8;
-    data_dtr_old |= (uint16_t)EEPROM_RandomRead(0x0002);
-    uint16_t charge_old = (uint16_t)EEPROM_RandomRead(0x0005);
+    data_dtr_old |= EEPROM_RandomRead(0x0422);
+    charge_old = EEPROM_RandomRead(0x070);
     charge_old = charge_old << 8;
-    charge_old |= (uint16_t)EEPROM_RandomRead(0x0004);
+    charge_old |= EEPROM_RandomRead(0x0069);
 
     // Calculations
-    float total_scurrent = ((float)data_dcr - (float)data_dcr_old);
+    scurrent = curr_dcr - data_dcr_old;
     if(total_scurrent < 0){ // if it rolled over reset and recalc
            total_scurrent += 65536; // 2^16
-           data_dcr = 0;
+           curr_dcr = 0;
            hdq_send(0x74,0x01);
     }
-    total_scurrent =total_scurrent*12.5/0.75; //mA
-    float diss_hours   = ((float)data_dtr-(float)data_dtr_old);
+    for(i=0;i<50;i++){
+        total_scurrent+=scurrent;
+    }
+    //total_scurrent=total_scurrent*50; //mA
+    while(total_scurrent > 3){
+        total_scurrent-=3;
+        scurrent_div+=1;
+    }
+    diss_hours   = curr_dtr-data_dtr_old;
     if(diss_hours < 0){ // if it rolled over reset and recalc
         diss_hours += 65536; // 2^16
-        data_dtr = 0;
+        curr_dtr = 0;
         hdq_send(0x74,0x08);
     }
-    diss_hours = (diss_hours/4096);
-    float charge_diss = total_scurrent * diss_hours;
-    uint16_t charge_new = charge_old - (uint16_t)charge_diss;
+    charge_diss=scurrent_div*diss_hours;
+    //float charge_diss = total_scurrent * diss_hours;
+    charge_new = charge_old - charge_diss;
 
     // Make them writeable to EEPROM
-    unsigned char data_dcr_low  = (unsigned char) (data_dcr & 0xFF);
-    unsigned char data_dcr_high = (unsigned char) ((data_dcr>>8) & 0xFF);
-    unsigned char data_dtr_low  = (unsigned char) (data_dtr & 0xFF);
-    unsigned char data_dtr_high = (unsigned char) ((data_dtr>>8) & 0xFF);
+    /*unsigned char dcr_write_low  = (unsigned char) (curr_dcr & 0xFF);
+    unsigned char dcr_write_high = (unsigned char) ((curr_dcr>>8) & 0xFF);
+    unsigned char dtr_write_low  = (unsigned char) (curr_dcr & 0xFF);
+    unsigned char dtr_write_high = (unsigned char) ((curr_dcr>>8) & 0xFF);
     unsigned char charge_new_low  = (unsigned char) (charge_new & 0xFF);
-    unsigned char charge_new_high = (unsigned char) ((charge_new>>8) & 0xFF);
+    unsigned char charge_new_high = (unsigned char) ((charge_new>>8) & 0xFF);*/
 
     // write new values
-    EEPROM_ByteWrite(0x0000,data_dcr_low);
+    EEPROM_ByteWrite(0x0420,((unsigned char) (curr_dcr & 0xFF)));
     EEPROM_AckPolling();
-    EEPROM_ByteWrite(0x0001,data_dcr_high);
+    EEPROM_ByteWrite(0x0421,((unsigned char) ((curr_dcr>>8) & 0xFF)));
     EEPROM_AckPolling();
-    EEPROM_ByteWrite(0x0002,data_dtr_low);
+    EEPROM_ByteWrite(0x0422,((unsigned char) (curr_dcr & 0xFF)));
     EEPROM_AckPolling();
-    EEPROM_ByteWrite(0x0003,data_dtr_high);
+    EEPROM_ByteWrite(0x0423,((unsigned char) ((curr_dcr>>8) & 0xFF)));
     EEPROM_AckPolling();
-    EEPROM_ByteWrite(0x0004,charge_new_low);
+    EEPROM_ByteWrite(0x0069,((unsigned char) (charge_new & 0xFF)));
     EEPROM_AckPolling();
-    EEPROM_ByteWrite(0x0005,charge_new_high);
+    EEPROM_ByteWrite(0x0070,((unsigned char) ((charge_new>>8) & 0xFF)));
     EEPROM_AckPolling();
 
     return charge_new;
