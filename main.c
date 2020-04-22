@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-// http://www.ti.com/lit/zip/slaa208
 #include "I2Croutines.h"
 #define Pi 3.14159265359
 
@@ -93,8 +92,7 @@ void init_msp430(){
     WDTCTL = WDTPW | WDTHOLD;   // stop watchdog timer
     P3SEL |= BIT3 + BIT4; // Select P3.3 for USCI_A0 TXD and P3.4 for USCI_A0 RXD
     UCA0CTL1 |= UCSWRST; // Reset state machine
-    UCSCTL4 &= ~SELS_4; // Use XT1 oscillator as SMCLK source
-    UCSCTL4 |= SELA_4;  // Use DCOCLKCIV as ACLK source
+    UCSCTL4 &= !SELS_4; // Use XT1 oscillator as SMCLK source
     UCA0CTL1 |= UCSSEL_2; // SMCLK
     UCA0BR0 = 0x06; // Baud Rate to 4800
     UCA0BR1 = 0x00;
@@ -601,6 +599,7 @@ __interrupt void Port_1(void){
     default:   _never_executed();
     }
     __delay_cycles(50000);
+    P1IFG &= ~BIT5; // P2.0 IFG cleared
 }
 
 // P2.0 interrupt PB2
@@ -653,6 +652,8 @@ __interrupt void Port_2(void){
     default:   _never_executed();
     }
     __delay_cycles(50000);
+    P2IFG &= ~BIT0; // P2.0 IFG cleared
+    P2IFG &= ~BIT2; // P2.0 IFG cleared
 }
 
 //TIMER INTERUPT
@@ -700,9 +701,10 @@ void __attribute__ ((interrupt(TIMER1_A0_VECTOR))) TIMER1_A0_ISR (void)
      str_wr(dist);
      str_wr(" m");
      new_line();
-     str_wr("DIR: ");
+     str_wr("DIR:");
      direction = calc_direction();
      str_wr(direction);
+     str_wr(" BatLife:H");
      free(saved_coords[0]);
      free(saved_coords[1]);
      free(saved_coords[2]);
