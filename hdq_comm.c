@@ -276,5 +276,84 @@ void hdq_send(uint8_t addr, uint8_t data){
        return;
 }
 
+int main(void)
+{
+    WDTCTL = WDTPW | WDTHOLD;   // stop watchdog timer
+    //hdq_init();
+    InitI2C(0x50); // Initialize I2C module
+    init_msp430();
+    // General Interrupt Enable
+    _BIS_SR(GIE);
+    //EEPROM_ByteWrite(0x0000, 0b01010101);
+    //EEPROM_AckPolling();
+    //cc_clear(CCR);
+
+    //cc_clear(CTR);
+    /*UCSCTL4 |= SELA_4; // Use XT1 oscillator as SMCLK source
+    P2DIR |= BIT3;
+    TA0CTL = 0;                 // Zero Out
+    TA0CTL = BIT4+BIT8;       // Up Mode//ACLK
+    TA0CCR0 = 200-1;            // 200 us
+    TA0CCTL0 |= CCIE;               // Interrupt enable*/
+
+    /*EEPROM_ByteWrite(0x0420,0x00);
+    EEPROM_AckPolling();
+    EEPROM_ByteWrite(0x0421,0x00);
+    EEPROM_AckPolling();
+    EEPROM_ByteWrite(0x0422,0x00);
+    EEPROM_AckPolling();
+    EEPROM_ByteWrite(0x0423,0x00);
+    EEPROM_AckPolling();
+    EEPROM_ByteWrite(0x0069,0xEE);
+    EEPROM_AckPolling();
+    EEPROM_ByteWrite(0x070,0x00);
+    EEPROM_AckPolling();
+
+    uint8_t read = EEPROM_RandomRead(0x0420);
+    read = EEPROM_RandomRead(0x0421);
+    read = EEPROM_RandomRead(0x0422);
+    read = EEPROM_RandomRead(0x0423);
+    read = EEPROM_RandomRead(0x0069);
+    read = EEPROM_RandomRead(0x0070);*/
+
+    //EEPROM_ByteWrite(0x0000,(unsigned char)read);
+    //EEPROM_AckPolling();
+    hdq_init();
+    //hdq_send(0x74,0x09);
+
+    uint16_t charge = cc_update();
+    uint8_t data = hdq_rec(0x75);
+    //unsigned char data_moe_ee = data & 0xFF;
+    //hdq_init();
+    uint16_t data_dcr=cc_dataread(0x7E);
+    uint16_t data_dtr=cc_dataread(0x78);
+
+    unsigned char data_dcr_ee = data_dcr & 0xFF;
+    unsigned char data_dtr_ee = data_dtr & 0xFF;
+    EEPROM_ByteWrite(0x0000,data_dcr_ee);
+    EEPROM_AckPolling();
+    EEPROM_ByteWrite(0x0000,data_dtr_ee);
+    EEPROM_AckPolling();
+
+    //uint8_t data = EEPROM_RandomRead(0x0100);
+
+    //uint16_t data_ccr=cc_dataread(CCR);
+
+    //uint16_t data_ctr=cc_dataread(0x76);
+
+    //__delay_cycles(100000);
+    //TA0CTL = 0;
+    while(1){
+        //if(TA0R < 100){
+        //    P2OUT |= BIT3;
+        //} else {
+        //    P2OUT &= ~BIT3;
+        //}
+    }
+
+
+
+    return 0;
+}
 
 
