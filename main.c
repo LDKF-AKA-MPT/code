@@ -37,12 +37,6 @@ int address_c = 0;
 float charge =0;
 float percent = 0;
 char percent_str[4];
-//char* latD;
-//char* latM;
-//char* lonD;
-//char* lonM;
-
-
 unsigned char read_val;
 unsigned char write_val;
 int button1Flag = 0;
@@ -83,9 +77,6 @@ void init_lcd(){
     data_wr(0xFE); // Command Prompt
     data_wr(0x52); // Set Contrast
     data_wr(0x28); // contrast 1 - 50
-    //data_wr(0xFE); // Command Prompt
-    //data_wr(0x53); // Set Brightness
-    //data_wr(0x01); // backlight 1 - 15
     data_wr(0xFE); // Command Prompt
     data_wr(0x48); // Underline Cursor Off
     data_wr(0xFE); // Command Prompt
@@ -242,10 +233,6 @@ float calculateBearing(float lat1, float lat2, float deltaLon) {
 
 float calculateDistance(float lat1, float lat2, float deltaLat, float deltaLon){
     // Calculate distance between current location and destination using Haversine formula
-//    float lat1 = to_radians(currLat);            // move these 4 lines to caller function
-//    float lat2 = to_radians(destLat);
-//    float deltaLat = to_radians(destLat-currLat);
-//    float deltaLon = to_radians(destLon-currLon);
     float a = pow(sin(deltaLat/2), 2.0) + cos(lat1)*cos(lat2)*pow(sin(deltaLon/2), 2.0);
     return 2*atan2(sqrt(a), sqrt(1-a))*6371000.0;
 }
@@ -316,15 +303,6 @@ void ftoa(float n, char* res, int afterpoint)
 }
 void getCoords() {
     receiveflag = 0;    // end receiving
-
-   // coords[0] = (char*)malloc(sizeof(char)*4);   // strings for lat degrees and minute
-   // coords[1]= (char*)malloc(sizeof(char)*9);
-   // coords[2] = (char*)malloc(sizeof(char)*5);    // strings for lon degrees and minute
-   // coords[3] = (char*)malloc(sizeof(char)*9);
-    //char latD[4];
-    //char latM[9];
-    //char lonD[5];
-    //cahr lonM[9];
     unsigned int lati = 1;   // counters
     unsigned int loni = 1;
     unsigned int i;
@@ -349,9 +327,6 @@ void getCoords() {
         coords_0[0] = '+';
         coords_1[0] = '+';
     }
-    //coords[0] = latD;
-    //coords[1] = latM;
-
     coords_2[1] = buff[18];     // store lonD
     coords_2[2] = buff[19];
     coords_2[3] = buff[20];
@@ -368,10 +343,6 @@ void getCoords() {
         coords_2[0] = '+';
         coords_3[0] = '+';
     }
-    //coords[2] = lonD;
-    //coords[3] = lonM;
-    //latitude = convertCoord(coords[0], coords[1]);
-    //longitude = convertCoord(coords[2], coords[3]);
     filled = 1;
 }
 char* calc_direction(){
@@ -443,10 +414,6 @@ void store_coords()
             EEPROM_AckPolling();
             address += 1;
         }
-   // free(coords[0]);
-    //free(coords[1]);
-    //free(coords[2]);
-    //free(coords[3]);
     TA1CCTL0 &= ~CCIE; //disable timer interrupt after storing to eeprom
 }
 
@@ -503,9 +470,7 @@ int main(void)
 {
     InitI2C(0x50); // Initialize I2C module
     init_msp430();
-    //_BIS_SR(GIE);
     hdq_init();
-    //__delay_cycles(10000000);
     hdq_send(0x74,0x09);
 
     init_lcd();
@@ -541,25 +506,7 @@ int main(void)
     EEPROM_AckPolling();
     EEPROM_ByteWrite(0x423, 0);
     EEPROM_AckPolling();
-    //uint8_t count_high = hdq_rec(0x79);
-    //uint8_t count_low = hdq_rec(0x78);
-    //uint8_t data = hdq_rec(0x7E);
-    //receiveflag = 1;
 
-/*
-    //Store To EEPROM Coord Arrays
-    if(button1Flag)
-    {
-        store_coords();
-        button1Flag = 0;
-    }
-    //Read and Display Cooord Data
-    if(button2Flag)
-    {
-        read_disp_coords();
-        button2Flag = 0;
-    }
-*/
     __bis_SR_register(LPM0_bits + GIE); // Enter low power mode, interrupts enabled
     __no_operation(); // For debugger
 }
@@ -763,8 +710,6 @@ __interrupt void Port_2(void){
     default:   _never_executed();
     }
     __delay_cycles(1000000);
-    //P2IFG &= ~BIT0; // P2.0 IFG cleared
-    //P2IFG &= ~BIT2; // P2.0 IFG cleared
     P2IFG &= ~BIT0;
     P2IE |= BIT0;
     P2IE |= BIT2;

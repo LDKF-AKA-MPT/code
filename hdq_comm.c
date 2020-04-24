@@ -33,33 +33,6 @@ int address_charge = 0;
 char charge_str[10];
 char dcr_str[3];
 
-void clear_lcd1(){
-    data_wr1(0xFE); // Command Prompt
-    data_wr1(0x51); // Clear Screen
-    data_wr1(0xFE); // Command Prompt
-    data_wr1(0x46); // Move Cursor to Start
-}
-
-void data_wr1(unsigned char data){
-    P1OUT &= ~BIT3; //SS = 0;
-    while(!(UCB1IFG&UCTXIFG)); // Wait for TX buffer ready
-    UCB1TXBUF = data; // Fill and send buffer
-    __delay_cycles(100); // Wait for buffer to send
-    // Pulse clock, Data is sent on rising edge
-    P4OUT &= ~BIT3; //SCL = 0;
-    __delay_cycles(500);
-    P4OUT |= BIT3; //SCL = 1;
-    P1OUT |= BIT3; //SS = 1;
-}
-
-void str_wr1(char* data){
-    int i;
-    int strLen = strlen(data);
-    for(i = 0; i < strLen; i++){
-        data_wr1(data[i]);
-    }
-}
-
 void hdq_init(void){
     WDTCTL = WDTPW | WDTHOLD;   // stop watchdog timer
 
@@ -201,11 +174,6 @@ float cc_update(void){
        EEPROM_AckPolling();
        address_charge += 1;
     }
-    /*EEPROM_ByteWrite(0x0069,((unsigned char) (charge_new & 0xFF)));
-    EEPROM_AckPolling();
-    EEPROM_ByteWrite(0x0070,((unsigned char) ((charge_new>>8) & 0xFF)));
-    EEPROM_AckPolling();*/
-
     return charge_new_fl;
 }
 
