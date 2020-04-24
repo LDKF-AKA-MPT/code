@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include "I2Croutines.h"
+#include "I2Croutines.h" //http://www.ti.com/lit/zip/slaa208 taken from here
 #include "hdq_comm.h"
 #define Pi 3.14159265359
 #define charge_reset "2500.00000"
@@ -12,14 +12,17 @@ char buff[50] = {0};
 int counter = 0;     // buffer counter
 int receiveflag = 0; // start to receive message flag
 int storeflag = 0;   // start to store into buffer flag
-int firstFlag = 0; // Help with prof meyers shaky ass hands
-int secondFlag = 0; // Help with prof meyers shaky ass hands
-int thirdFlag = 0; // Help with prof meyers shaky ass hands
+int firstFlag = 0;
+int secondFlag = 0;
+int thirdFlag = 0;
 int idleFlag = 0;
 int speakerFlag = 0; //flag that sets the output of the speaker on
 int brightness = 0;
 int count = 0; //count for speaker output
-char* coords[4];
+char coords_0[4];
+char coords_1[9];
+char coords_2[5];
+char coords_3[9];
 char* saved_coords[4]; //coordinates read from eeprom
 float prev_latitude;
 float prev_longitude;
@@ -257,7 +260,7 @@ float convertCoord(char* coordD, char* coordM) {
     float minute = strtof(coordM, NULL)/60.0;
     return to_radians(degree+minute);
 }
-
+//CITE THIS - taken from https://www.geeksforgeeks.org/convert-floating-point-number-string/
 void reverse(char* str, int len)
 {
     int i = 0, j = len - 1, temp;
@@ -269,7 +272,7 @@ void reverse(char* str, int len)
         j--;
     }
 }
-
+//CITE THIS- - taken from https://www.geeksforgeeks.org/convert-floating-point-number-string/
 int intToStr(int x, char str[], int d)
 {
     int i = 0;
@@ -287,7 +290,7 @@ int intToStr(int x, char str[], int d)
     str[i] = '\0';
     return i;
 }
-
+//CITE THIS - taken from https://www.geeksforgeeks.org/convert-floating-point-number-string/
 void ftoa(float n, char* res, int afterpoint)
 {
     // Extract integer part
@@ -314,56 +317,59 @@ void ftoa(float n, char* res, int afterpoint)
 void getCoords() {
     receiveflag = 0;    // end receiving
 
-    char* latD = (char*)malloc(sizeof(char)*4);   // strings for lat degrees and minute
-    char* latM = (char*)malloc(sizeof(char)*9);
-    char* lonD = (char*)malloc(sizeof(char)*5);    // strings for lon degrees and minute
-    char* lonM = (char*)malloc(sizeof(char)*9);
-
+   // coords[0] = (char*)malloc(sizeof(char)*4);   // strings for lat degrees and minute
+   // coords[1]= (char*)malloc(sizeof(char)*9);
+   // coords[2] = (char*)malloc(sizeof(char)*5);    // strings for lon degrees and minute
+   // coords[3] = (char*)malloc(sizeof(char)*9);
+    //char latD[4];
+    //char latM[9];
+    //char lonD[5];
+    //cahr lonM[9];
     unsigned int lati = 1;   // counters
     unsigned int loni = 1;
     unsigned int i;
 
-    latD[3] = '\0';
-    latM[8] = '\0';
-    lonD[4] = '\0';
-    lonM[8] = '\0';
+    coords_0[3] = '\0';
+    coords_1[8] = '\0';
+    coords_2[4] = '\0';
+    coords_3[8] = '\0';
 
-    latD[1] = buff[6];      // store latD
-    latD[2] = buff[7];
+    coords_0[1] = buff[6];      // store latD
+    coords_0[2] = buff[7];
 
     for (i = 8; i < 15; i++) {   // store latM
-        latM[lati] = buff[i];
+        coords_1[lati] = buff[i];
         lati++;
     }
     if (buff[16] == 'S') {  //determine sign
-        latD[0] = '-';
-        latM[0] = '-';
+        coords_0[0] = '-';
+        coords_1[0] = '-';
     }
     else {
-        latD[0] = '+';
-        latM[0] = '+';
+        coords_0[0] = '+';
+        coords_1[0] = '+';
     }
-    coords[0] = latD;
-    coords[1] = latM;
+    //coords[0] = latD;
+    //coords[1] = latM;
 
-    lonD[1] = buff[18];     // store lonD
-    lonD[2] = buff[19];
-    lonD[3] = buff[20];
+    coords_2[1] = buff[18];     // store lonD
+    coords_2[2] = buff[19];
+    coords_2[3] = buff[20];
 
     for (i = 21; i < 28; i++) {   // store lonM
-        lonM[loni] = buff[i];
+        coords_3[loni] = buff[i];
         loni++;
     }
     if (buff[29] == 'W') {  // determine sign
-        lonD[0] = '-';
-        lonM[0] = '-';
+        coords_2[0] = '-';
+        coords_3[0] = '-';
     }
     else {
-        lonD[0] = '+';
-        lonM[0] = '+';
+        coords_2[0] = '+';
+        coords_3[0] = '+';
     }
-    coords[2] = lonD;
-    coords[3] = lonM;
+    //coords[2] = lonD;
+    //coords[3] = lonM;
     //latitude = convertCoord(coords[0], coords[1]);
     //longitude = convertCoord(coords[2], coords[3]);
     filled = 1;
@@ -413,34 +419,34 @@ void store_coords()
 
     int i;
     int address = 0;
-    for(i = 0; i < strlen(coords[0]) ; i++)
+    for(i = 0; i < strlen(coords_0) ; i++)
     {
-        EEPROM_ByteWrite(address,coords[0][i]);
+        EEPROM_ByteWrite(address,coords_0[i]);
         EEPROM_AckPolling();
         address += 1;
     }
-    for(i = 0; i < strlen(coords[1]) ; i++)
+    for(i = 0; i < strlen(coords_1) ; i++)
         {
-            EEPROM_ByteWrite(address,coords[1][i]);
+            EEPROM_ByteWrite(address,coords_1[i]);
             EEPROM_AckPolling();
             address += 1;
         }
-    for(i = 0; i < strlen(coords[2]) ; i++)
+    for(i = 0; i < strlen(coords_2) ; i++)
         {
-            EEPROM_ByteWrite(address,coords[2][i]);
+            EEPROM_ByteWrite(address,coords_2[i]);
             EEPROM_AckPolling();
             address += 1;
         }
-    for(i = 0; i < strlen(coords[3]) ; i++)
+    for(i = 0; i < strlen(coords_3) ; i++)
         {
-            EEPROM_ByteWrite(address,coords[3][i]);
+            EEPROM_ByteWrite(address,coords_3[i]);
             EEPROM_AckPolling();
             address += 1;
         }
-    free(coords[0]);
-    free(coords[1]);
-    free(coords[2]);
-    free(coords[3]);
+   // free(coords[0]);
+    //free(coords[1]);
+    //free(coords[2]);
+    //free(coords[3]);
     TA1CCTL0 &= ~CCIE; //disable timer interrupt after storing to eeprom
 }
 
@@ -501,6 +507,7 @@ int main(void)
     hdq_init();
     //__delay_cycles(10000000);
     hdq_send(0x74,0x09);
+
     init_lcd();
     clear_lcd();
     str_wr("   Welcome to   ");
@@ -526,6 +533,14 @@ int main(void)
     str_wr("   Welcome to   ");
     new_line();
     str_wr("      MPT      ");
+    EEPROM_ByteWrite(0x420, 0);
+    EEPROM_AckPolling();
+    EEPROM_ByteWrite(0x421, 0);
+    EEPROM_AckPolling();
+    EEPROM_ByteWrite(0x422, 0);
+    EEPROM_AckPolling();
+    EEPROM_ByteWrite(0x423, 0);
+    EEPROM_AckPolling();
     //uint8_t count_high = hdq_rec(0x79);
     //uint8_t count_low = hdq_rec(0x78);
     //uint8_t data = hdq_rec(0x7E);
@@ -661,6 +676,7 @@ __interrupt void Port_1(void){
             EEPROM_ByteWrite(0x423, 0);
             EEPROM_AckPolling();
             P1IE |= BIT6;
+            hdq_send(0x74,0x09);
             clear_lcd();
             str_wr("Battery reset!");
         }
@@ -742,10 +758,7 @@ __interrupt void Port_2(void){
         button1Flag = 0;
         button2Flag = 0;
         clear_lcd();
-        str_wr("   Welcome to   ");
-        new_line();
-        str_wr("      MPT      ");
-
+        str_wr("MPT IS IDLE...");
         break;
     default:   _never_executed();
     }
@@ -796,8 +809,8 @@ void __attribute__ ((interrupt(TIMER1_A0_VECTOR))) TIMER1_A0_ISR (void)
      filled = 0;
      prev_latitude = convertCoord(saved_coords[0], saved_coords[1]);
      prev_longitude = convertCoord(saved_coords[2], saved_coords[3]);
-     curr_latitude = convertCoord(coords[0], coords[1]);
-     curr_longitude = convertCoord(coords[2], coords[3]);
+     curr_latitude = convertCoord(coords_0, coords_1);
+     curr_longitude = convertCoord(coords_2, coords_3);
      distance = calculateDistance( curr_latitude, prev_latitude, (prev_latitude - curr_latitude),(prev_longitude - curr_longitude));
      bearing = calculateBearing(curr_latitude, prev_latitude, (prev_longitude - curr_longitude));
      clear_lcd();
@@ -814,10 +827,10 @@ void __attribute__ ((interrupt(TIMER1_A0_VECTOR))) TIMER1_A0_ISR (void)
      free(saved_coords[1]);
      free(saved_coords[2]);
      free(saved_coords[3]);
-     free(coords[0]);
-     free(coords[1]);
-     free(coords[2]);
-     free(coords[3]);
+     //free(coords[0]);
+     //free(coords[1]);
+     //free(coords[2]);
+     //free(coords[3]);
      free(direction);
      //disable_timer();
      button2Flag = 0;
