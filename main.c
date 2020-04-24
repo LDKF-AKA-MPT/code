@@ -4,7 +4,9 @@
 #include <stdlib.h>
 #include <math.h>
 #include "I2Croutines.h"
+#include "hdq_comm.h"
 #define Pi 3.14159265359
+#define charge_reset "2500.00000"
 
 char buff[50] = {0};
 int counter = 0;     // buffer counter
@@ -12,6 +14,8 @@ int receiveflag = 0; // start to receive message flag
 int storeflag = 0;   // start to store into buffer flag
 int firstFlag = 0; // Help with prof meyers shaky ass hands
 int secondFlag = 0; // Help with prof meyers shaky ass hands
+int thirdFlag = 0; // Help with prof meyers shaky ass hands
+int idleFlag = 0;
 int speakerFlag = 0; //flag that sets the output of the speaker on
 int brightness = 0;
 int count = 0; //count for speaker output
@@ -26,6 +30,14 @@ float bearing;
 char* direction;
 char dist[11];
 int filled = 0;
+int address_c = 0;
+float charge =0;
+float percent = 0;
+char percent_str[4];
+//char* latD;
+//char* latM;
+//char* lonD;
+//char* lonM;
 
 
 unsigned char read_val;
@@ -92,7 +104,9 @@ void init_msp430(){
     WDTCTL = WDTPW | WDTHOLD;   // stop watchdog timer
     P3SEL |= BIT3 + BIT4; // Select P3.3 for USCI_A0 TXD and P3.4 for USCI_A0 RXD
     UCA0CTL1 |= UCSWRST; // Reset state machine
-    UCSCTL4 &= !SELS_4; // Use XT1 oscillator as SMCLK source
+    UCSCTL4 &= ~SELS_4; // Use XT1 oscillator as SMCLK source
+    //UCSCTL4 &= ~ SELM_4;
+    UCSCTL4 |= SELA_4;
     UCA0CTL1 |= UCSSEL_2; // SMCLK
     UCA0BR0 = 0x06; // Baud Rate to 4800
     UCA0BR1 = 0x00;
@@ -131,6 +145,13 @@ void init_msp430(){
     P2IE |= BIT0; // P2.0 interrupt enabled
 
     //Button 4 setup
+    P1REN |= BIT6; // Enable P2.0 internal resistor
+    P1OUT |= BIT6; // Set P2.0 as pull-Up resistor
+    P1IES &= ~BIT6; // P2.0 Lo/Hi edge
+    P1IFG &= ~BIT6; // P2.0 IFG cleared
+    P1IE |= BIT6; // P2.0 interrupt enabled
+
+    //Button 4 setup
     P2REN |= BIT2; // Enable P2.0 internal resistor
     P2OUT |= BIT2; // Set P2.0 as pull-Up resistor
     P2IES &= ~BIT2; // P2.0 Lo/Hi edge
@@ -146,6 +167,7 @@ void init_msp430(){
     //TIMER INIT
     TA1CCR0 = 65536-1;
     TA1CTL = TASSEL_2 + MC_1 + TACLR;
+    //TA1CTL |= BIT7;
 
     //Piezo Buzzer INIT
     P1DIR &= ~BIT2;                            // P1.2 output
@@ -154,7 +176,7 @@ void init_msp430(){
     //PWM OUTPUT
     TA0CCR0 = 32-1;                          // PWM Period
     TA0CCTL1 = OUTMOD_7;                      // CCR1 reset/set
-    TA0CCR1 = 16;                            // CCR1 PWM duty cycle
+    TA0CCR1 = 16-1;                            // CCR1 PWM duty cycle
     TA0CTL = TASSEL_2 + MC_1 + TACLR;         // SMCLK, up mode, clear TAR
 
 }
@@ -475,30 +497,38 @@ int main(void)
 {
     InitI2C(0x50); // Initialize I2C module
     init_msp430();
+    //_BIS_SR(GIE);
+    hdq_init();
+    //__delay_cycles(10000000);
+    hdq_send(0x74,0x09);
     init_lcd();
     clear_lcd();
     str_wr("   Welcome to   ");
     new_line();
     str_wr("      MPT      ");
+    __delay_cycles(1000000);
     initGPS();
-    __delay_cycles(100);
+    __delay_cycles(1000);
     setRate();
-    __delay_cycles(100);
+    __delay_cycles(1000);
     disableUnused();
     sendQuery();
     clear_lcd();
     str_wr("Wait for fixed");
     new_line();
     str_wr("GPS location!");
-    _delay_cycles(50000);
+    _delay_cycles(1000000);
     while(!(P2IN & BIT4)); // wait for gps to fix coords
     clear_lcd();
     str_wr("GPS FIXED!");
-    __delay_cycles(50000);
+    __delay_cycles(1000000);
     clear_lcd();
     str_wr("   Welcome to   ");
     new_line();
     str_wr("      MPT      ");
+    //uint8_t count_high = hdq_rec(0x79);
+    //uint8_t count_low = hdq_rec(0x78);
+    //uint8_t data = hdq_rec(0x7E);
     //receiveflag = 1;
 
 /*
@@ -530,12 +560,12 @@ void __attribute__ ((interrupt(USCI_A0_VECTOR))) USCI_A0_ISR (void)
 #error Compiler not supported!
 #endif
 {
-   /* TA1CCTL0 &= ~CCIE;                //disable timer interrupt - CCR0
+    TA1CCTL0 &= ~CCIE;                //disable timer interrupt - CCR0
     P1IE &= ~BIT5;                    // P1.5 interrupt disabled
     P2IE &= ~BIT0;                    //P2.0 interrupt disabled
     P1IFG &= ~BIT5;                     //clear flag
     P2IFG &= ~BIT0;                     //clear flag
-    */
+
     char temp;
     switch(__even_in_range(UCA0IV,4))
     {
@@ -547,8 +577,11 @@ void __attribute__ ((interrupt(USCI_A0_VECTOR))) USCI_A0_ISR (void)
                 storeflag = 0;
                 counter = 0;
                 getCoords();
-                TA1CCTL0 = CCIE; // CCR0 interrupt enabled
+                P1IE |= BIT5;                    // P1.5 interrupt enabled
+                P2IE |= BIT0;                    //P2.0 interrupt enabled
                 UCA0IE &= ~UCRXIE;           // disable USCI_A0 RX interrupts
+                TA1CCTL0 = CCIE; // CCR0 interrupt enabled
+
             }
             if (storeflag){
                 buff[counter] = temp;
@@ -564,21 +597,22 @@ void __attribute__ ((interrupt(USCI_A0_VECTOR))) USCI_A0_ISR (void)
     default: break;
 
   }
-    /*
-    TA1CCTL0 = CCIE;              // CCR0 interrupt enabled
-    P1IE |= BIT5;                    // P1.5 interrupt enabled
-    P2IE |= BIT0;                    //P2.0 interrupt enabled */
+
+
 }
 
 // PB1.5 interrupt PB1
 #pragma vector=PORT1_VECTOR
 __interrupt void Port_1(void){
+    disable_timer();
+    counter = 0;
     switch( __even_in_range( P1IV, P1IV_P1IFG7 )) {
     case P1IV_P1IFG5:
+        idleFlag = 0;
         secondFlag = 0;
+        thirdFlag = 0;
         speakerFlag = 0;
         P1DIR &= ~BIT2;
-        disable_timer();
         while(!(P1IN & BIT5)); // Wait for button to be unpressed
         if (firstFlag){
             firstFlag = 0;
@@ -596,21 +630,70 @@ __interrupt void Port_1(void){
             firstFlag = 1;
         }
         break;
+    case P1IV_P1IFG6:
+       //reset battery
+        P1IFG &= ~BIT5; // P2.0 IFG cleared
+        P1IE &= ~BIT5;
+        idleFlag = 0;
+        secondFlag = 0;
+        firstFlag = 0;
+        speakerFlag = 0;
+        P1DIR &= ~BIT2;
+        disable_timer();
+        while(!(P1IN & BIT6)); // Wait for button to be unpressed
+        if(thirdFlag)
+        {
+            thirdFlag = 0;
+            P1IE &= ~BIT6;
+            address_c = 69;
+            int i = 0;
+            for(i = 0; i < strlen(charge_reset); i++){
+               EEPROM_ByteWrite(address_c,charge_reset[i]);
+               EEPROM_AckPolling();
+               address_c += 1;
+            }
+            EEPROM_ByteWrite(0x420, 0);
+            EEPROM_AckPolling();
+            EEPROM_ByteWrite(0x421, 0);
+            EEPROM_AckPolling();
+            EEPROM_ByteWrite(0x422, 0);
+            EEPROM_AckPolling();
+            EEPROM_ByteWrite(0x423, 0);
+            EEPROM_AckPolling();
+            P1IE |= BIT6;
+            clear_lcd();
+            str_wr("Battery reset!");
+        }
+        else if(thirdFlag == 0){
+            clear_lcd();
+            str_wr("Reset battery?");
+            thirdFlag = 1;
+        }
+        break;
     default:   _never_executed();
     }
-    __delay_cycles(50000);
+    __delay_cycles(1000000);
     P1IFG &= ~BIT5; // P2.0 IFG cleared
+    P1IFG &= ~BIT6; // P2.0 IFG cleared
+    P1IE |= BIT5;
 }
 
 // P2.0 interrupt PB2
 #pragma vector=PORT2_VECTOR
 __interrupt void Port_2(void){
+    disable_timer();
+    counter = 0;
     switch( __even_in_range( P2IV, P2IV_P2IFG7 )) {
     case P2IV_P2IFG0:
+        P2IE &= ~BIT0;
+        P2IFG &= ~BIT0;
+        P2IE &= ~BIT2;
+        P2IFG &= ~BIT2;
+        idleFlag = 0;
         firstFlag = 0;
+        thirdFlag = 0;
         speakerFlag = 0;
         P1DIR &= ~BIT2;
-        disable_timer();
         while(!(P2IN & BIT0)); // Wait for button to be unpressed
         if (secondFlag){
             secondFlag = 0;
@@ -631,29 +714,48 @@ __interrupt void Port_2(void){
         break;
     case P2IV_P2IFG2:
         while(!(P2IN & BIT2)); // Wait for button to be unpressed
+        counter = 0;
+        P2IE &= ~BIT2;
+        P2IFG &= ~BIT2;
+        P2IE &= ~BIT0;
+        P2IFG &= ~BIT0;
+        disable_timer();
+        P2IFG &= ~BIT2;
         clear_lcd();
         if(speakerFlag){
             P1DIR &= ~BIT2;
             speakerFlag = 0;
             str_wr("Tracking ended!");
-            __delay_cycles(50000);
+            __delay_cycles(1000000);
         }
-        clear_lcd();
+
+        idleFlag = 1;
+        __delay_cycles(1000000);
+        charge = cc_update();
+        TA1CCR0 = 65536-1;
+        TA1CCTL0 |= CCIE;
+        count = 0;
         speakerFlag = 0;
         secondFlag = 0;
         firstFlag = 0;
-        disable_timer();
+        thirdFlag = 0;
         button1Flag = 0;
         button2Flag = 0;
+        clear_lcd();
         str_wr("   Welcome to   ");
         new_line();
         str_wr("      MPT      ");
+
         break;
     default:   _never_executed();
     }
-    __delay_cycles(50000);
-    P2IFG &= ~BIT0; // P2.0 IFG cleared
-    P2IFG &= ~BIT2; // P2.0 IFG cleared
+    __delay_cycles(1000000);
+    //P2IFG &= ~BIT0; // P2.0 IFG cleared
+    //P2IFG &= ~BIT2; // P2.0 IFG cleared
+    P2IFG &= ~BIT0;
+    P2IE |= BIT0;
+    P2IE |= BIT2;
+    P2IFG &= ~BIT2;
 }
 
 //TIMER INTERUPT
@@ -666,6 +768,8 @@ void __attribute__ ((interrupt(TIMER1_A0_VECTOR))) TIMER1_A0_ISR (void)
 #error Compiler not supported!
 #endif
 {
+  counter = 0;
+
   if(filled && button1Flag){
     button1Flag = 0;
     speakerFlag = 0;
@@ -686,6 +790,7 @@ void __attribute__ ((interrupt(TIMER1_A0_VECTOR))) TIMER1_A0_ISR (void)
   }
   else if(filled && button2Flag)
   {
+     disable_timer();
      button2Flag = 0;
      speakerFlag = 0;
      filled = 0;
@@ -704,7 +809,7 @@ void __attribute__ ((interrupt(TIMER1_A0_VECTOR))) TIMER1_A0_ISR (void)
      str_wr("DIR:");
      direction = calc_direction();
      str_wr(direction);
-     str_wr(" BatLife:H");
+     //str_wr(" BatLife:H");
      free(saved_coords[0]);
      free(saved_coords[1]);
      free(saved_coords[2]);
@@ -717,30 +822,34 @@ void __attribute__ ((interrupt(TIMER1_A0_VECTOR))) TIMER1_A0_ISR (void)
      //disable_timer();
      button2Flag = 0;
      speakerFlag = 1;
+     count = 9;
+     TA1CCTL0 = CCIE; // CCR0 interrupt enabled
+
 
   }
   else if(speakerFlag){
-      if (counter >= 1) {
+      //distance = 60; //need to remove later
+      if (count >= 9) {
               if (P1DIR & BIT2) {
-                  P1DIR &= 0xfb;      //turn off output
+                  P1DIR &= ~BIT2;      //turn off output
               }
               else {
                   P1DIR |= BIT2;      //turn on output
               }
-              counter = 0;
-              if (distance <= 100000) {        //change frequency according to distance
+              count = 0;
+              if (distance <= 5000) {        //change frequency according to distance
                   TA1CCR0 = 65536 - 1;
               }
-              if (distance <= 10000) {
+              if (distance <= 1000) {
                   TA1CCR0 = 32768 - 1;
               }
-              if (distance <= 1000){
+              if (distance <= 500){
                   TA1CCR0 = 16384 - 1;
               }
-              if(distance <= 500){
+              if(distance <= 250){
                   TA1CCR0 = 8192 - 1;
               }
-              if (distance <= 250){
+              if (distance <= 150){
                   TA1CCR0 = 4096 - 1;
               }
               if (distance <= 100){
@@ -756,12 +865,39 @@ void __attribute__ ((interrupt(TIMER1_A0_VECTOR))) TIMER1_A0_ISR (void)
                   P1DIR |= BIT2;
                   disable_timer();
               }
-              else {
-                  P1DIR |= BIT2;
-              }
           }
-          counter ++;
+          count++;
       }
+  else if(idleFlag){
+      if(count >= 40){
+          count = 0;
+          charge = cc_update();
+          percent = charge / 2500 * 100;
+          ftoa(percent, percent_str, 1);
+          if(charge > 1250){
+              clear_lcd();
+              str_wr("BatteryLife:");
+              new_line();
+              str_wr("HIGH ");
 
+          }
+          if(charge <= 1250){
+              clear_lcd();
+              str_wr("BatteryLife:");
+              new_line();
+              str_wr("MEDIUM ");
+
+            }
+          if(charge <=500){
+              clear_lcd();
+              str_wr("BatteryLife:");
+              new_line();
+              str_wr("LOW ");
+          }
+          str_wr(percent_str);
+          str_wr("%");
+      }
+      count++;
+  }
 
 }
